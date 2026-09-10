@@ -44,7 +44,7 @@ python dread.py products --json
 ### Option 1 (recommended): installer
 
 ```bash
-./scripts/install_dread.sh
+./install.sh
 
 # first load after install (if needed)
 # zsh:  source ~/.zshrc && hash -r
@@ -57,7 +57,7 @@ dread --help
 
 ### After install (before your first scan)
 
-Refresh local intelligence databases once so scans are useful. This is separate from `install_dread.sh` (the installer may remind you about ASN data but does not download CVE data).
+Refresh local intelligence databases once so scans are useful. This is separate from `install.sh` (the installer may remind you about ASN data but does not download CVE data).
 
 ```bash
 # 1) ASN database (fast; needed for ASN/IP intel plugins)
