@@ -1,0 +1,49 @@
+[
+  {
+    "name": "nmap",
+    "binary": "nmap",
+    "category": "recon",
+    "description": "Port and service scan.",
+    "argv": ["-T3", "-F", "{target}"]
+  },
+  {
+    "name": "nikto",
+    "binary": "nikto",
+    "category": "recon",
+    "description": "Web server misconfiguration scan.",
+    "argv": ["-h", "{target}"]
+  },
+  {
+    "name": "wrk",
+    "binary": "wrk",
+    "category": "load",
+    "description": "HTTP throughput load generator.",
+    "argv": ["-t2", "-c10", "-d10s", "{target}"],
+    "heavy": ["-t8", "-c100", "-d60s", "{target}"]
+  },
+  {
+    "name": "ab",
+    "binary": "ab",
+    "category": "load",
+    "description": "Apache HTTP benchmark.",
+    "argv": ["-n", "100", "-c", "10", "{target}"],
+    "heavy": ["-n", "5000", "-c", "200", "{target}"],
+    "packages": {"pacman": "apache", "apt": "apache2-utils", "dnf": "httpd-tools"}
+  },
+  {
+    "name": "siege",
+    "binary": "siege",
+    "category": "load",
+    "description": "HTTP load and stress test.",
+    "argv": ["-c", "10", "-t", "10s", "{target}"],
+    "heavy": ["-c", "200", "-t", "60s", "{target}"]
+  },
+  {
+    "name": "hey",
+    "binary": "hey",
+    "category": "load",
+    "description": "HTTP load generator.",
+    "argv": ["-n", "200", "-c", "10", "{target}"],
+    "heavy": ["-n", "10000", "-c", "200", "{target}"]
+  }
+]

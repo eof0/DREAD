@@ -1,0 +1,40 @@
+name: Rust Engine
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "probe/engines/rust/probe_engine/**"
+      - ".github/workflows/rust.yml"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "probe/engines/rust/probe_engine/**"
+      - ".github/workflows/rust.yml"
+
+defaults:
+  run:
+    working-directory: probe/engines/rust/probe_engine
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "probe/engines/rust/probe_engine -> target"
+      - name: Build (release)
+        run: cargo build --release --locked
+      # Informational for now — the engine has existing fmt drift and clippy
+      # warnings. These report without failing the build; drop the
+      # continue-on-error lines to enforce once the engine is clean.
+      - name: Format check
+        run: cargo fmt --check
+        continue-on-error: true
+      - name: Clippy
+        run: cargo clippy --release --all-targets
+        continue-on-error: true

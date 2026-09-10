@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+      - name: Install dependencies
+        run: |
+          uv venv .venv
+          uv pip install -p .venv/bin/python -r requirements.txt -r requirements-dev.txt
+      - name: Test
+        run: uv run --python .venv/bin/python --no-project pytest
+
+  dashboard:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: reports/dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Build
+        run: npm run build

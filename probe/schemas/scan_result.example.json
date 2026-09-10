@@ -1,0 +1,32 @@
+{
+  "scan_id": "b3d9c8e4-9d2e-4e7a-9e5b-1d4bfa2f8c91",
+  "engine": "python",
+  "engine_version": "0.4.2",
+  "target": {
+    "input": "example.com",
+    "resolved": ["93.184.216.34"]
+  },
+  "timestamp": "2025-12-22T21:34:11Z",
+  "duration_ms": 842,
+  "findings": [
+    {
+      "id": "open-port-93.184.216.34-443",
+      "type": "open_port",
+      "severity": "info",
+      "confidence": 0.99,
+      "asset": {
+        "ip": "93.184.216.34",
+        "port": 443,
+        "protocol": "tcp",
+        "service": "https"
+      },
+      "details": {
+        "banner": "nginx/1.24.0"
+      },
+      "evidence": [
+        "tcp connect succeeded"
+      ],
+      "references": []
+    }
+  ]
+}

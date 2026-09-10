@@ -1,0 +1,35 @@
+id: exposed-env
+name: Exposed Environment File
+severity: critical
+description: |
+  Environment configuration file (.env) is publicly accessible.
+  May contain database credentials, API keys, and other secrets.
+author: Probe Team
+tags: [env, config, secrets, exposure]
+
+request:
+  method: GET
+  path: /.env
+  headers:
+    User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.0
+
+matchers:
+  - type: regex
+    regex:
+      - "^(DB_PASSWORD|DATABASE_URL|API_KEY|SECRET_KEY|AWS_)"
+      - "^[A-Z_]+=.*"
+    condition: or
+    part: body
+  
+  - type: status
+    status:
+      - 200
+
+metadata:
+  remediation: |
+    1. Immediately rotate all credentials found in the exposed file
+    2. Deny access to .env files via web server configuration
+    3. Move sensitive config outside web root
+    4. Use environment variable injection instead of .env files in production
+  references:
+    - https://www.acunetix.com/vulnerabilities/web/env-file-found/

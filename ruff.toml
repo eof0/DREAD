@@ -1,0 +1,14 @@
+# Ruff lint policy for DREAD.
+#
+# The gate is correctness-only for now — rules the whole tree already passes:
+# syntax errors (E9), undefined/unbound names and bad format calls (F82, F7),
+# and invalid asserts / f-string misuse (F63). This catches real bugs without
+# blocking on the existing style backlog.
+#
+# Style/cleanup rules are intentionally NOT gated yet. When ready, widen the
+# selection (e.g. add "F" for unused imports/variables and empty f-strings,
+# then "E"/"I"/"UP") and clear the backlog with `ruff check --fix`.
+line-length = 100
+
+[lint]
+select = ["E9", "F63", "F7", "F82"]

@@ -1,0 +1,76 @@
+# Documentation
+old_docs/
+.worktrees/
+docusaurus/
+stitch_export
+
+# Temporary machine-migration bundle (memory + CVE db copies); delete after restore
+MIGRATION_TEMP/
+
+
+# Secrets 
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+.secrets/
+
+# Scan & run artifacts 
+scan_results/
+scan_results_test/
+suite_runs/
+reports/_demo_out/
+reports/dashboard/dist/
+
+# Python 
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+*.cover
+.hypothesis/
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+#Node 
+node_modules/
+**/node_modules/
+
+# Go / tooling 
+probe/scanner/engines/network/network_scanner
+probe/scanner/engines/network/*.exe
+
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.local.md
+notes/
+private/
+probe/.git/
+probe/data/cve_db.sqlite
+
+
+# Rust build output
+probe/engines/rust/probe_engine/target/
+
+# Scan run artifacts (now default under ~/.dread/runs)
+runs/

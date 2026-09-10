@@ -1,0 +1,40 @@
+id: exposed-git-config
+name: Exposed Git Configuration
+severity: high
+description: |
+  Git configuration file (.git/config) is publicly accessible.
+  This exposes repository metadata and potentially sensitive information
+  about the codebase structure and remote repositories.
+
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/.git/config"
+      - "{{BaseURL}}/.git/HEAD"
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+matchers:
+  - type: word
+    words:
+      - "[core]"
+      - "repositoryformatversion"
+      - "ref: refs/heads/"
+    condition: or
+    part: body
+
+extractors:
+  - type: regex
+    name: repository_info
+    regex:
+      - "url = (https?://[^\\s]+)"
+      - "ref: refs/heads/([^\\s]+)"
+    part: body
+
+metadata:
+  tags:
+    - exposure
+    - git
+    - config
+  reference:
+    - https://www.acunetix.com/vulnerabilities/web/git-repository-found/

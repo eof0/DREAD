@@ -1,0 +1,39 @@
+# Git & VCS
+.git
+.github
+
+# Tests 
+tests
+
+# Python
+.venv
+venv
+env
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Secrets 
+.env
+.env.*
+!.env.example
+
+# Local artifacts 
+scan_results
+scan_results_test
+suite_runs
+stitch_export
+**/.suite-runs
+reports/_demo_out
+reports/dashboard/dist
+reports/dashboard/node_modules
+
+# docs
+old_docs
+docusaurus
+
+# Misc
+*.log
+.DS_Store

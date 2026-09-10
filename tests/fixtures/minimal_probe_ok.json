@@ -1,0 +1,22 @@
+{
+  "scan_id": "golden-scan",
+  "target": "https://example.com",
+  "findings": [
+    {
+      "severity": "low",
+      "title": "Test finding",
+      "url": "https://example.com/",
+      "plugin_name": "test_plugin",
+      "description": "Fixture row for DreadAI verify."
+    }
+  ],
+  "statistics": {
+    "findings_by_severity": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 1,
+      "info": 0
+    }
+  }
+}

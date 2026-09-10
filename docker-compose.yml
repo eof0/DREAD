@@ -1,0 +1,13 @@
+services:
+  dread:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dread:latest
+    stdin_open: true
+    tty: true
+    volumes:
+      - dread-data:/home/dread/.dread
+
+volumes:
+  dread-data:

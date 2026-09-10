@@ -1,0 +1,28 @@
+{
+  "report_type": "unified_suite",
+  "reports_schema_version": "1.0",
+  "run_id": "golden-run-ok",
+  "generated_at": "2026-03-29T12:00:00Z",
+  "rollups": {
+    "total_findings": 1,
+    "findings_by_severity": {
+      "critical": 0,
+      "high": 1,
+      "medium": 0,
+      "low": 0,
+      "info": 0
+    }
+  },
+  "findings": [
+    {
+      "id": "probe:test:0",
+      "severity": "high",
+      "title": "Example",
+      "source_product": "probe"
+    }
+  ],
+  "sources": {
+    "probe": { "included": true, "scans": [] },
+    "scope": { "included": false, "summary": null }
+  }
+}

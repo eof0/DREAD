@@ -1,0 +1,8 @@
+{
+  "scan_id": "uuid",
+  "options": {
+    "ports": [80, 443],
+    "timeout_ms": 3000,
+    "stealth": false
+  }
+}

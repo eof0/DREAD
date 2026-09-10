@@ -1,0 +1,34 @@
+id: exposed-git
+name: Exposed Git Repository
+severity: high
+description: |
+  The .git directory is exposed, allowing attackers to download the entire
+  source code repository including history, credentials, and sensitive files.
+author: Probe Team
+tags: [git, exposure, sensitive-files]
+
+request:
+  method: GET
+  path: /.git/config
+  headers:
+    User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.0
+
+matchers:
+  - type: word
+    words:
+      - "repositoryformatversion"
+      - "[core]"
+    condition: or
+    part: body
+  
+  - type: status
+    status:
+      - 200
+
+metadata:
+  remediation: |
+    Deny access to .git directory via web server configuration.
+    For Apache: Add "RedirectMatch 404 /\\.git"
+    For Nginx: Add "location ~ /\\.git { deny all; }"
+  references:
+    - https://portswigger.net/daily-swig/git-repository-exposure-the-most-common-constructive-vulnerability-we-see

@@ -1,0 +1,44 @@
+id: exposed-env-file
+name: Exposed Environment File
+severity: critical
+description: |
+  Environment configuration file (.env) is publicly accessible.
+  This file typically contains sensitive credentials including
+  database passwords, API keys, and application secrets.
+
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/.env"
+      - "{{BaseURL}}/.env.local"
+      - "{{BaseURL}}/.env.production"
+      - "{{BaseURL}}/.env.development"
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+
+matchers:
+  - type: word
+    words:
+      - "DB_PASSWORD="
+      - "DB_HOST="
+      - "API_KEY="
+      - "SECRET_KEY="
+      - "AWS_ACCESS_KEY_ID"
+      - "DATABASE_URL="
+    condition: or
+    part: body
+
+extractors:
+  - type: regex
+    name: credentials
+    regex:
+      - "(DB_PASSWORD|DATABASE_PASSWORD|DB_PASS)=([^\\s]+)"
+      - "(API_KEY|API_SECRET|SECRET_KEY)=([^\\s]+)"
+      - "(AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY)=([^\\s]+)"
+    part: body
+
+metadata:
+  tags:
+    - exposure
+    - config
+    - credentials

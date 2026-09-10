@@ -1,0 +1,4 @@
+# Optional browser-backed checks for JavaScript-driven DOM vulnerabilities.
+# Install the package and the browser binary (the second step is required):
+#   pip install -r requirements-dom.txt && playwright install chromium
+playwright>=1.40

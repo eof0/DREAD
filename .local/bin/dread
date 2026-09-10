@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DREAD_REPO="${DREAD_REPO:-/home/eof_/code/eof0/DREAD}"
+VENV_PY="${DREAD_REPO}/.venv/bin/python"
+DREAD_PY="${DREAD_REPO}/dread.py"
+ENV_FILE="${DREAD_REPO}/.env"
+
+if [[ ! -x "${VENV_PY}" && -x "${DREAD_REPO}/.venv/bin/python3" ]]; then
+  VENV_PY="${DREAD_REPO}/.venv/bin/python3"
+fi
+
+if [[ -f "${ENV_FILE}" ]]; then
+  set -a
+  source "${ENV_FILE}"
+  set +a
+fi
+
+exec "${VENV_PY}" "${DREAD_PY}" "$@"

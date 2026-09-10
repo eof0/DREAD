@@ -1,0 +1,92 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Probe Scan Result",
+  "type": "object",
+  "required": [
+    "scan_id",
+    "engine",
+    "engine_version",
+    "target",
+    "timestamp",
+    "duration_ms",
+    "findings"
+  ],
+  "properties": {
+    "scan_id": {
+      "type": "string",
+      "description": "Unique scan identifier (UUID)"
+    },
+    "engine": {
+      "type": "string",
+      "enum": ["rust"],
+      "description": "Engine that produced the scan (locked to rust)"
+    },
+    "engine_version": {
+      "type": "string"
+    },
+    "target": {
+      "type": "object",
+      "required": ["input", "resolved"],
+      "properties": {
+        "input": { "type": "string" },
+        "resolved": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/finding" }
+    }
+  },
+  "definitions": {
+    "finding": {
+      "type": "object",
+      "required": ["id", "type", "severity", "confidence", "asset", "details"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "severity": {
+          "type": "string",
+          "enum": ["info", "low", "medium", "high", "critical"]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "asset": {
+          "type": "object",
+          "required": ["ip"],
+          "properties": {
+            "ip": { "type": "string" },
+            "port": { "type": "integer" },
+            "protocol": { "type": "string" },
+            "service": { "type": "string" }
+          }
+        },
+        "details": {
+          "type": "object",
+          "description": "Free-form JSON payload, must be serializable"
+        },
+        "evidence": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "references": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

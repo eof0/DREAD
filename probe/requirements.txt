@@ -1,0 +1,24 @@
+# Probe Official - Complete Dependencies
+# Python 3.12+
+
+# HTTP requests
+requests>=2.28.0
+
+# HTML parsing
+beautifulsoup4>=4.11.0
+
+# PDF report generation
+reportlab>=3.6.0
+
+# Templating for HTML reports
+jinja2>=3.1.0
+
+# Version comparison for CVE correlation
+packaging>=21.0
+
+# YAML configuration support (optional, mostly using Python dicts now)
+pyyaml>=6.0
+
+# Additional utilities
+urllib3>=1.26.0
+certifi>=2022.0.0

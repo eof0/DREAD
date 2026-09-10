@@ -1,0 +1,8 @@
+# Python
+python engines/python/port_scan.py scan --input example.com
+
+# Rust
+engines/rust/portscan scan --input example.com
+
+# Go
+engines/go/agent scan --input example.com

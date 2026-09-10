@@ -1,0 +1,43 @@
+id: wordpress-file-manager-rce
+name: WordPress File Manager RCE
+severity: critical
+description: |
+  WordPress File Manager plugin before 6.9 contains an unauthenticated
+  remote code execution vulnerability allowing attackers to execute
+  arbitrary commands on the server.
+
+requests:
+  - method: POST
+    path:
+      - "{{BaseURL}}/wp-content/plugins/wp-file-manager/lib/php/connector.minimal.php"
+    headers:
+      Content-Type: "multipart/form-data; boundary=----WebKitFormBoundary"
+    body: |
+      ------WebKitFormBoundary
+      Content-Disposition: form-data; name="cmd"
+
+      upload
+      ------WebKitFormBoundary
+      Content-Disposition: form-data; name="target"
+
+      l1_
+      ------WebKitFormBoundary--
+
+matchers:
+  - type: word
+    words:
+      - "{"
+      - "error"
+      - "fileManager"
+    condition: and
+    part: body
+  - type: status
+    status:
+      - 200
+
+metadata:
+  tags:
+    - wordpress
+    - rce
+    - file-manager
+    - cve-2020-25213

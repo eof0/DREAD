@@ -1,0 +1,41 @@
+id: open-redirect
+name: Open Redirect Vulnerability
+severity: medium
+description: |
+  The application accepts user-controlled input to redirect to external URLs.
+  This can be used in phishing attacks by redirecting to attacker-controlled sites.
+author: Probe Team
+tags: [redirect, phishing, open-redirect]
+
+request:
+  method: GET
+  path: /redirect?url=https://evil.com
+  headers:
+    User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.0
+
+matchers:
+  - type: regex
+    regex:
+      - "location:\\s*https://evil.com"
+    part: header
+  
+  - type: status
+    status:
+      - 301
+      - 302
+      - 307
+      - 308
+
+variables:
+  - name: redirect_param
+    default: url
+    description: Parameter name used for redirect
+
+metadata:
+  remediation: |
+    1. Use an allowlist of permitted redirect destinations
+    2. Use indirect references (mapping tokens to URLs server-side)
+    3. If dynamic URLs required, validate the domain against allowlist
+    4. Avoid using user input for redirects when possible
+  references:
+    - https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html
