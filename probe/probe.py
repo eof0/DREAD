@@ -94,6 +94,8 @@ def cmd_scan(args) -> int:
         config_kwargs["enabled_plugins"] = [
             p.strip() for p in args.plugins.split(",") if p.strip()
         ]
+    if getattr(args, "render_js", None):
+        config_kwargs["render_js"] = True
     if getattr(args, "output_dir", None):
         config_kwargs["output_dir"] = str(args.output_dir).strip()
 
@@ -200,6 +202,13 @@ Examples:
             "Comma-separated plugins to run (overrides profile list). "
             "e.g. fingerprinting,security_headers,tls_analysis"
         ),
+    )
+    scan_parser.add_argument(
+        "--render-js",
+        action="store_true",
+        default=None,
+        help="Render pages in a headless browser to crawl JavaScript/SPA sites "
+             "(needs Playwright + Chromium; on by default in the 'full' profile)",
     )
     scan_parser.add_argument(
         "-v", "--verbose",

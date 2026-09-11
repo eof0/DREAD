@@ -126,12 +126,16 @@ class RequestHandler:
             sensitive_headers=list((headers or {}).keys())
         )
         
-        # Configure retry strategy
+        # Configure retry strategy. A 500 is often the SIGNAL for a security scanner
+        # (error-based SQLi, stack traces), so we must not retry it away or raise on it
+        # — retry only transient infrastructure errors, and always hand back the final
+        # response so plugins can inspect the error body.
         retry_strategy = Retry(
             total=max_retries,
             backoff_factor=backoff_factor,
-            status_forcelist=[429, 500, 502, 503, 504],  # Retry these status codes
+            status_forcelist=[429, 502, 503, 504],
             allowed_methods=["HEAD", "GET", "OPTIONS", "POST"],
+            raise_on_status=False,
         )
         
         # Configure connection adapter with pooling
@@ -146,7 +150,12 @@ class RequestHandler:
         
         # Set default headers
         default_headers = {
-            'User-Agent': 'Probe/1.0 (Security Scanner; https://github.com/eof0/DREAD)',
+            # A realistic browser UA; the old "Security Scanner" string was an instant
+            # WAF block, hiding real findings behind a 403.
+            'User-Agent': (
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+            ),
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.5',
             'Accept-Encoding': 'gzip, deflate',

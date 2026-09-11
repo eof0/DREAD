@@ -115,6 +115,30 @@ def _hostname_from_scan_target(raw: str) -> str:
     return (urlparse(value).hostname or "").strip().rstrip(".")
 
 
+def _dedupe_scan_targets(targets: list[str]) -> list[str]:
+    """
+    Keep the first target per host:port. Scope returns bare hostnames while the
+    user may pass a URL, so "https://example.com" and "example.com" must count
+    as one target or the same site gets crawled and scanned twice.
+    """
+    seen: set[tuple[str, int | None]] = set()
+    unique: list[str] = []
+    for raw in targets:
+        value = (raw or "").strip().lower()
+        if "://" not in value:
+            value = f"https://{value}"
+        try:
+            port = urlparse(value).port
+        except ValueError:
+            port = None
+        key = (_hostname_from_scan_target(raw), None if port in (80, 443) else port)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(raw)
+    return unique
+
+
 def _omit_redundant_www_when_user_chose_apex(primary: str, targets: list[str]) -> list[str]:
     """
     If the user targets the apex host (not www), omit www.<apex> from follow-on
@@ -204,14 +228,31 @@ def run_probe(
     output_dir: str | None = None,
     verbose: bool = False,
     skip_asn_refresh: bool = False,
+    staged_output: bool = False,
+    profile: str | None = None,
+    depth: int | None = None,
+    max_urls: int | None = None,
+    render_js: bool = False,
 ) -> subprocess.CompletedProcess:
-    """Run Probe scan. When quiet is False, stdout/stderr stream live to the terminal."""
+    """Run Probe scan. When quiet is False, stdout/stderr stream live to the terminal.
+
+    staged_output: output_dir is a temp dir merged and deleted by the caller, so
+    Probe should not list those soon-to-vanish paths as its artifacts.
+    """
     cmd = [sys.executable, str(PROBE_PATH), "scan", target]
 
     if verbose:
         cmd.append("-v")
     if plugins:
         cmd.extend(["--plugins", ",".join(plugins)])
+    if profile:
+        cmd.extend(["--profile", profile])
+    if depth is not None:
+        cmd.extend(["--depth", str(depth)])
+    if max_urls is not None:
+        cmd.extend(["--max-urls", str(max_urls)])
+    if render_js:
+        cmd.append("--render-js")
     if report_format:
         cmd.extend(["--format", report_format])
     if output_name:
@@ -220,9 +261,12 @@ def run_probe(
         cmd.extend(["--output-dir", output_dir])
 
     env = None
-    if skip_asn_refresh:
+    if skip_asn_refresh or staged_output:
         env = dict(os.environ)
+    if skip_asn_refresh:
         env["DREAD_ASN_PRECHECKED"] = "1"
+    if staged_output:
+        env["DREAD_STAGED_OUTPUT"] = "1"
 
     if quiet:
         return _run_with_heartbeat(
@@ -450,15 +494,15 @@ def full_scan(target: str, args: argparse.Namespace) -> int:
             print("[!] Discovery failed, falling back to direct scan")
         targets_to_scan = [target]
     else:
-        targets_to_scan = [target]
-
         subdomains = discovery.get("discovery", {}).get("subdomains", {})
         all_unique = subdomains.get("all_unique", [])
 
+        # Primary goes first so it survives dedupe; filtering before the cap keeps
+        # the primary's own host from using up a --max-subdomains slot.
         max_subdomains = getattr(args, "max_subdomains", 10)
-        for sub in all_unique[:max_subdomains]:
-            if sub != target:
-                targets_to_scan.append(sub)
+        targets_to_scan = _dedupe_scan_targets(
+            _omit_redundant_www_when_user_chose_apex(target, [target, *all_unique])
+        )[: 1 + max_subdomains]
 
         if not quiet:
             print(f"\n[+] Discovered {len(all_unique)} subdomains")
@@ -466,8 +510,6 @@ def full_scan(target: str, args: argparse.Namespace) -> int:
                 f"[+] Will scan {len(targets_to_scan)} target(s) "
                 f"(primary + up to {max_subdomains} from list)"
             )
-
-    targets_to_scan = _omit_redundant_www_when_user_chose_apex(target, targets_to_scan)
 
     if not quiet:
         print()
@@ -507,6 +549,11 @@ def full_scan(target: str, args: argparse.Namespace) -> int:
             output_dir=runs_root_str,
             verbose=verbose,
             skip_asn_refresh=asn_prechecked,
+            staged_output=is_temp_work_dir,
+            profile=getattr(args, "profile", None),
+            depth=getattr(args, "depth", None),
+            max_urls=getattr(args, "max_urls", None),
+            render_js=bool(getattr(args, "render_js", False)),
         )
         if proc.returncode != 0:
             failures += 1
@@ -638,10 +685,15 @@ def full_scan(target: str, args: argparse.Namespace) -> int:
         elif not quiet:
             print()
             print("=" * 60)
-            print("SCAN COMPLETE")
+            print("REPORTS READY")
             print("=" * 60)
-            for artifact in sorted(merged_dir.glob("dread_suite_report.*")):
-                print(f"  [+] Report: {artifact}")
+            exec_html = merged_dir / "executive_summary.html"
+            tech_html = merged_dir / "technical_report.html"
+            if exec_html.is_file():
+                print(f"  [+] For the client (plain English):  {exec_html}")
+            if tech_html.is_file():
+                print(f"  [+] For IT / security (full detail): {tech_html}")
+            print(f"      All formats in: {merged_dir}")
 
     if is_temp_work_dir and run_dir:
         shutil.rmtree(run_dir, ignore_errors=True)
@@ -719,6 +771,26 @@ def main() -> int:
         "--plugins",
         "-p",
         help="Comma-separated Probe plugins (passed through to probe scan)",
+    )
+    scan_parser.add_argument(
+        "--profile",
+        help="Probe scan profile: quick, standard, safe-active, full, infrastructure",
+    )
+    scan_parser.add_argument(
+        "--depth",
+        type=int,
+        help="Crawl depth per host (overrides profile)",
+    )
+    scan_parser.add_argument(
+        "--max-urls",
+        type=int,
+        help="Maximum URLs to crawl per host (overrides profile)",
+    )
+    scan_parser.add_argument(
+        "--render-js",
+        action="store_true",
+        help="Render pages in a headless browser to crawl JavaScript/SPA sites "
+             "(needs Playwright + Chromium; implied by --profile full)",
     )
     scan_parser.add_argument(
         "--format",

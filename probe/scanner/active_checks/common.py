@@ -11,9 +11,17 @@ SQL_ERRORS = [
         r"warning.*mysql",
         r"postgresql.*error",
         r"sqlite(?:3)?(?:.|\s)*error",
+        # SQLite (incl. Python's sqlite3) reports these without the word "sqlite":
+        r"unrecognized token",
+        r"near \".*\": syntax error",
+        r"no such column",
+        r"sqlite3\.\w+error",
         r"unclosed quotation mark after the character string",
         r"quoted string not properly terminated",
         r"ora-\d{5}",
+        r"psycopg2\.\w+error",
+        r"pg::\w+error",
+        r"sqlstate\[",
     )
 ]
 

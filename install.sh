@@ -66,7 +66,7 @@ print_before_first_scan_notice() {
     echo -e "${b}  1) dread update-db${r}  ${d}(ASN ok — optional refresh)${r}"
   fi
 
-  echo -e "${b}  2) export NVD_API_KEY=\"your-nvd-api-key\"${r}  ${d}(optional, faster incremental sync)${r}"
+  echo -e "${b}  2) add NVD_API_KEY=your-nvd-api-key to ${ENV_FILE}${r}  ${d}(optional, faster incremental sync; activate the key from NVD's email first)${r}"
 
   if [[ "${CVE_NEEDS_BOOTSTRAP}" -eq 1 ]]; then
     echo -e "${y}  3) dread update-cve-db${r}  ${d}(recommended; skipping may delay the first scan)${r}"
@@ -104,6 +104,12 @@ if [[ ! -f "${ENV_FILE}" ]]; then
     echo "[+] Created .env from .env.example"
   else
     cat > "${ENV_FILE}" <<'EOF'
+# Loaded automatically by dread. A variable already exported in your shell wins over this file.
+
+# NVD API key (optional, raises the NVD rate limit for `dread update-cve-db`).
+# Request one at https://nvd.nist.gov/developers/request-an-api-key and activate it
+# from the link in NVD's email; unactivated keys are rejected with "Invalid apiKey."
+NVD_API_KEY=
 EOF
     echo "[+] Created .env template"
   fi

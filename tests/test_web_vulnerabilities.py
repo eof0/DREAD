@@ -1,5 +1,12 @@
+import re
+import sys
 from html import escape
+from pathlib import Path
 from urllib.parse import urlparse
+
+_PROBE = Path(__file__).resolve().parents[1] / "probe"
+if str(_PROBE) not in sys.path:
+    sys.path.insert(0, str(_PROBE))
 
 from requests import Response
 
@@ -225,11 +232,16 @@ def test_detects_new_sql_error_signature_without_leaking_original_value():
     assert "secret-token" not in findings[0].evidence["payload"]
 
 
-def test_detects_command_injection_marker():
+def _shell_arithmetic(text):
+    """Evaluate an injected ;echo $((a*b)); the way a vulnerable shell would."""
+    match = re.search(r"\$\(\((\d+)\*(\d+)\)\)", text)
+    return str(int(match.group(1)) * int(match.group(2))) if match else None
+
+
+def test_detects_command_injection_when_shell_evaluates_arithmetic():
     def responder(params):
-        if "dread-cmd-" in params["cmd"]:
-            return response(params["cmd"])
-        return response("safe")
+        product = _shell_arithmetic(params["cmd"])
+        return response(product if product else "safe")
 
     findings, _ = scan("cmd", responder)
 
@@ -238,17 +250,36 @@ def test_detects_command_injection_marker():
     ]
 
 
+def test_reflected_command_payload_is_not_command_injection():
+    # A page that echoes input verbatim reproduces the operands but never the product,
+    # so it must not be flagged as command injection (reflected XSS is a separate matter).
+    def responder(params):
+        return response(params["cmd"])
+
+    findings, _ = scan("cmd", responder)
+
+    assert all("Command Injection" not in finding.title for finding in findings)
+
+
 def test_detects_template_expression_evaluation():
     def responder(params):
-        if params["template"] == "{{7*7}}":
-            return response("49")
-        return response("safe")
+        match = re.fullmatch(r"\{\{(\d+)\*(\d+)\}\}", params["template"])
+        return response(str(int(match.group(1)) * int(match.group(2))) if match else "safe")
 
     findings, _ = scan("template", responder)
 
     assert [finding.title for finding in findings] == [
         "Server-Side Template Injection in parameter 'template'"
     ]
+
+
+def test_reflected_template_payload_is_not_ssti():
+    def responder(params):
+        return response(params["template"])
+
+    findings, _ = scan("template", responder)
+
+    assert all("Template Injection" not in finding.title for finding in findings)
 
 
 def test_detects_local_file_inclusion_signature():
@@ -328,11 +359,14 @@ def test_limits_each_page_to_six_parameters():
         handler,
     )
 
+    page_params = {f"p{i}" for i in range(8)}
+    # Count only the page's own parameters that were fuzzed; some checks (e.g.
+    # prototype pollution) add extra injection keys that aren't page parameters.
     mutated = {
         key
         for _url, kwargs in handler.calls
         for key, value in (kwargs.get("params") or {}).items()
-        if value != "safe"
+        if key in page_params and value != "safe"
     }
     assert mutated == {f"p{i}" for i in range(6)}
 

@@ -83,6 +83,20 @@ def discover_domain(domain: str, options: dict, quiet: bool = False) -> dict:
         if all_unique:
             _log(f"[+] Subdomain discovery complete: {len(all_unique)} total")
             _log(f"[*] Subdomain phase completed in {elapsed:.2f}s")
+
+            # Dangling-CNAME takeover check over the discovered names (best-effort).
+            try:
+                from discovery.takeover import run_takeover_scan
+
+                _log("[*] Checking discovered subdomains for takeover risk...")
+                takeovers = run_takeover_scan(all_unique)
+                results["discovery"]["subdomain_takeover"] = takeovers
+                if takeovers:
+                    _log(f"[!] Potential subdomain takeover(s): {len(takeovers)}")
+                    for t in takeovers:
+                        _log(f"    - {t['subdomain']} -> {t['cname']} ({t['service']})")
+            except Exception as e:
+                _log(f"[!] Takeover check skipped: {e}")
         else:
             _log("[!] No subdomains discovered (possible API failure or restrictive target)")
     

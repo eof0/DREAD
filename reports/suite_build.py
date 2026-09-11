@@ -7,7 +7,11 @@ from pathlib import Path
 from aggregate import aggregate_from_cli_inputs
 from dashboard_writer import write_dashboard_bundle
 from suite_schema import REPORTS_SCHEMA_VERSION
-from writers.json_writer import write_suite_json
+from writers.json_writer import write_suite_json, write_technical_json
+
+# Customer deliverable base names (kept distinct from the internal dread_suite_report).
+EXECUTIVE_NAME = "executive_summary"
+TECHNICAL_NAME = "technical_report"
 
 
 def slim_report_for_dashboard(report: dict) -> dict:
@@ -42,16 +46,22 @@ def run_build(
         schema_version=REPORTS_SCHEMA_VERSION,
     )
 
+    # Internal artifact: the full report (with raw_embed) that the dashboard, run
+    # history and DreadAI read. Always written when JSON is requested, under its
+    # established name so those readers keep working.
     if "json" in formats:
         p = write_suite_json(report, output_dir, base_name)
-        messages.append(f"[+] JSON: {p}")
+        messages.append(f"[+] Internal report: {p}")
+        tp = write_technical_json(report, output_dir, TECHNICAL_NAME)
+        messages.append(f"[+] Technical JSON: {tp}")
 
     if "pdf" in formats:
         try:
+            from writers.executive import write_executive_pdf
             from writers.pdf_writer import write_suite_pdf
 
-            p = write_suite_pdf(report, output_dir, base_name)
-            messages.append(f"[+] PDF: {p}")
+            messages.append(f"[+] Executive PDF: {write_executive_pdf(report, output_dir, EXECUTIVE_NAME)}")
+            messages.append(f"[+] Technical PDF: {write_suite_pdf(report, output_dir, TECHNICAL_NAME)}")
         except ModuleNotFoundError as e:
             errors.append(
                 "PDF requires reportlab. Install: pip install reportlab "
@@ -62,10 +72,11 @@ def run_build(
 
     if "html" in formats:
         try:
+            from writers.executive import write_executive_html
             from writers.html_writer import write_suite_html
 
-            p = write_suite_html(report, output_dir, base_name)
-            messages.append(f"[+] HTML: {p}")
+            messages.append(f"[+] Executive summary: {write_executive_html(report, output_dir, EXECUTIVE_NAME)}")
+            messages.append(f"[+] Technical report: {write_suite_html(report, output_dir, TECHNICAL_NAME)}")
         except Exception as e:
             errors.append(f"HTML failed: {e}")
 

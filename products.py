@@ -57,8 +57,8 @@ SUITE_PRODUCTS: tuple[SuiteProduct, ...] = (
         "intel",
         "intel/intel.py",
         "Intel",
-        "Vulnerability intelligence: advisories, exploitability context, and enrichment pipelines.",
-        "scaffold",
+        "Vulnerability intelligence: KEV/EPSS/CVSS-driven CVE triage over the local store.",
+        "implemented",
     ),
     SuiteProduct(
         "reports",
@@ -71,9 +71,10 @@ SUITE_PRODUCTS: tuple[SuiteProduct, ...] = (
         "spear",
         "spear/spear.py",
         "Spear",
-        "Internal network/host assessment and automated penetration agent "
-        "(post-infiltration style, telemetry back to DREAD).",
-        "scaffold",
+        "Internal network assessment: host discovery, service enumeration, "
+        "service-risk analysis (assess), name-resolution poisoning monitor, and "
+        "LAN interaction mapping.",
+        "implemented",
     ),
     SuiteProduct(
         "cannon",

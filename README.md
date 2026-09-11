@@ -30,7 +30,8 @@ Supported hosts are Linux and macOS.
 | `probe` | Crawl + plugin-based vulnerability scanning | Implemented |
 | `reports` | Aggregated suite reporting | Implemented |
 | `dreadai` | Verification helpers | Implemented (expanding) |
-| `watch`, `graph`, `intel`, `spear`, `cannon` | Planned suite modules | Scaffold |
+| `intel` | KEV/EPSS/CVSS CVE triage over the local store | Implemented |
+| `watch`, `graph`, `spear`, `cannon` | Planned suite modules | Scaffold |
 
 Live registry:
 
@@ -104,6 +105,11 @@ python dread.py recon example.com
 python dread.py hunt https://example.com
 # equivalent
 python dread.py probe scan https://example.com
+
+# CVE triage over the local store (Intel)
+python dread.py intel cve CVE-2021-44228        # one CVE + computed priority
+python dread.py intel triage report.json        # rank every CVE id in a file
+python dread.py intel stats                      # KEV/EPSS coverage + tiers
 ```
 
 ### Important behavior
@@ -213,7 +219,7 @@ python dread.py update-cve-db --no-snapshot
 export DREAD_SKIP_CVE_UPDATE=1
 ```
 
-Set `NVD_API_KEY` for the higher NVD request limit. Interrupted windowed updates resume from the last committed page. DREAD checksum-verifies snapshots and installs them atomically. If the snapshot is unavailable on an empty installation, it falls back to a 30-day publication database and warns that coverage is partial.
+For the higher NVD request limit, put `NVD_API_KEY=<your-key>` in the repo's `.env`; `dread` loads it on every run. Request a key at https://nvd.nist.gov/developers/request-an-api-key and activate it from NVD's email first, since unactivated keys are rejected with `Invalid apiKey.` An `NVD_API_KEY` exported in your shell takes priority over `.env`, so `unset` any stale export. Interrupted windowed updates resume from the last committed page. DREAD checksum-verifies snapshots and installs them atomically. If the snapshot is unavailable on an empty installation, it falls back to a 30-day publication database and warns that coverage is partial.
 
 Direct product commands are also available via `python probe/probe.py ...` with the same flags.
 
@@ -253,7 +259,7 @@ python -m pytest
 
 ## Roadmap
 
-Short term: complete and integrate scaffold modules (`watch`, `graph`, `intel`, `spear`, `cannon`).
+Short term: complete and integrate scaffold modules (`watch`, `graph`, `spear`, `cannon`).
 
 Implementation direction: Python remains the orchestration core; performance-sensitive components move into compiled tooling (Go/Rust/Zig).
 

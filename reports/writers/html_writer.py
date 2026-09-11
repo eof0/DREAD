@@ -4,6 +4,8 @@ import html
 from pathlib import Path
 from typing import Any
 
+from writers import cloud_storage_checked
+
 _SEVERITY_ORDER = ("critical", "high", "medium", "low", "info")
 _SEVERITY_COLOR = {
     "critical": "#b02a37",
@@ -26,52 +28,75 @@ def _rank(severity: str) -> int:
 
 
 def write_suite_html(report: dict[str, Any], output_dir: Path, base_name: str) -> Path:
-    """Render the unified suite report as one self-contained, print-friendly HTML file."""
+    """Render the customer-facing report as one self-contained, print-friendly HTML file."""
     output_dir.mkdir(parents=True, exist_ok=True)
     html_path = output_dir / f"{base_name}.html"
 
     roll = report.get("rollups") or {}
     fbs = roll.get("findings_by_severity") or {}
-    total = roll.get("total_findings", len(report.get("findings") or []))
-    findings = sorted(
-        report.get("findings") or [],
-        key=lambda f: (_rank(str(f.get("severity", "info"))), str(f.get("plugin_name", ""))),
-    )
-    title = _esc(report.get("title") or "DREAD Unified Security Report")
+    vuln_count = roll.get("vulnerability_count", 0)
+    obs_count = roll.get("observation_count", 0)
 
+    def _sorted(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return sorted(
+            items,
+            key=lambda f: (_rank(str(f.get("severity", "info"))), str(f.get("plugin_name", ""))),
+        )
+
+    all_findings = report.get("findings") or []
+    vulnerabilities = _sorted([f for f in all_findings if f.get("classification") == "vulnerability"])
+    observations = _sorted([f for f in all_findings if f.get("classification") != "vulnerability"])
+    title = _esc(report.get("title") or "Recon/Vuln Analysis - Report Findings")
+    target = _esc(report.get("target") or "")
+    subtitle = f'<p class="subtitle">{target}</p>' if target else ""
+
+    vbs = roll.get("vulnerabilities_by_severity") or {}
     chips = "".join(
-        f'<span class="chip sev-{s}">{s}: {fbs.get(s, 0)}</span>' for s in _SEVERITY_ORDER
+        f'<span class="chip sev-{s}">{s}: {vbs.get(s, fbs.get(s, 0))}</span>'
+        for s in ("critical", "high", "medium", "low")
     )
 
+    # Customer-facing: describe what was assessed, never which internal tool did it.
     src = report.get("sources") or {}
-    src_blocks: list[str] = []
+    scope_blocks: list[str] = []
     bp = src.get("probe") or {}
     if bp.get("included"):
         rows = "".join(
-            f"<tr><td>{_esc(s.get('target'))}</td><td>{_esc(s.get('finding_count'))}</td>"
-            f"<td class='mono'>{_esc(s.get('artifact'))}</td></tr>"
+            f"<tr><td class='mono'>{_esc(s.get('target'))}</td><td>{_esc(s.get('finding_count'))}</td></tr>"
             for s in (bp.get("scans") or [])
         )
-        src_blocks.append(
-            "<h3>Probe</h3><table class='src'><thead><tr><th>Target</th>"
-            f"<th>Findings</th><th>Artifact</th></tr></thead><tbody>{rows}</tbody></table>"
+        scope_blocks.append(
+            "<h3>Hosts tested</h3><table class='src'><thead><tr><th>Host</th>"
+            f"<th>Findings</th></tr></thead><tbody>{rows}</tbody></table>"
         )
     bs = src.get("scope") or {}
     if bs.get("included"):
         summ = bs.get("summary") or {}
-        buckets = ", ".join((summ.get("cloud_bucket_counts") or {}).keys()) or "none"
-        src_blocks.append(
-            f"<h3>Scope</h3><p>Subdomains discovered: "
-            f"<strong>{_esc(summ.get('subdomain_count', 0))}</strong>. Cloud buckets: {_esc(buckets)}.</p>"
+        buckets = cloud_storage_checked(summ)
+        scope_blocks.append(
+            f"<h3>Attack surface discovery</h3><p>Subdomains discovered: "
+            f"<strong>{_esc(summ.get('subdomain_count', 0))}</strong>. Cloud storage checked: {_esc(buckets)}.</p>"
         )
-    sources_html = "".join(src_blocks) or "<p class='empty'>No sources attached.</p>"
+    scope_html = "".join(scope_blocks) or "<p class='empty'>No assessment scope recorded.</p>"
 
-    blocks: list[str] = []
-    for f in findings:
+    def _finding_block(f: dict[str, Any]) -> str:
         sev = str(f.get("severity", "info")).lower()
         endpoints = f.get("affected_endpoints") or ([f.get("url")] if f.get("url") else [])
         ep_html = "".join(f"<li class='mono'>{_esc(e)}</li>" for e in endpoints) or "<li>none recorded</li>"
-        blocks.append(
+        evidence = f.get("evidence") or {}
+        ev_html = ""
+        if evidence:
+            rows = "".join(
+                f"<tr><td>{_esc(k)}</td><td class='mono'>{_esc(v)}</td></tr>"
+                for k, v in evidence.items()
+                if v not in (None, "", [], {})
+            )
+            if rows:
+                ev_html = (
+                    "<div><h5>Evidence</h5><table class='ev'><tbody>"
+                    f"{rows}</tbody></table></div>"
+                )
+        return (
             f'<article class="finding sev-border-{sev}">'
             f'<div class="finding-head"><span class="badge sev-{sev}">{_esc(sev)}</span>'
             f'<span class="plugin">{_esc(f.get("plugin_name") or "scanner")}</span></div>'
@@ -79,9 +104,25 @@ def write_suite_html(report: dict[str, Any], output_dir: Path, base_name: str) -
             f'<p>{_esc(f.get("description") or "No description provided.")}</p>'
             f'<div class="meta"><div><h5>Remediation</h5>'
             f'<p>{_esc(f.get("remediation") or "Review and remediate the affected behavior.")}</p></div>'
-            f'<div><h5>Affected endpoints</h5><ul>{ep_html}</ul></div></div></article>'
+            f'<div><h5>Affected endpoints</h5><ul>{ep_html}</ul></div>{ev_html}</div></article>'
         )
-    findings_html = "".join(blocks) or "<p class='empty'>No findings recorded.</p>"
+
+    vulns_html = "".join(_finding_block(f) for f in vulnerabilities) or (
+        "<p class='empty'>No vulnerabilities were identified.</p>"
+    )
+    obs_html = "".join(_finding_block(f) for f in observations) or (
+        "<p class='empty'>No observations recorded.</p>"
+    )
+
+    checks = report.get("checks_performed") or []
+    checks_html = (
+        "<h2>Checks performed</h2><p class='lead'>The following categories of checks were "
+        "run during this assessment:</p><ul class='checks'>"
+        + "".join(f"<li class='mono'>{_esc(c)}</li>" for c in checks)
+        + "</ul>"
+        if checks
+        else ""
+    )
 
     sev_css = "".join(f".sev-{s}{{background:{c};}}" for s, c in _SEVERITY_COLOR.items())
     border_css = "".join(
@@ -99,8 +140,8 @@ def write_suite_html(report: dict[str, Any], output_dir: Path, base_name: str) -
     font: 15px/1.55 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }}
   .wrap {{ max-width: 900px; margin: 0 auto; padding: 48px 32px 80px; }}
   header.report {{ border-bottom: 3px solid #1d2230; padding-bottom: 20px; margin-bottom: 28px; }}
-  .eyebrow {{ font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: #6a7080; }}
-  h1 {{ margin: 6px 0 12px; font-size: 34px; letter-spacing: -.02em; }}
+  h1 {{ margin: 6px 0 6px; font-size: 26px; letter-spacing: -.02em; }}
+  .subtitle {{ margin: 0 0 12px; font-size: 16px; color: #4a5060; }}
   .stamp {{ color: #6a7080; font-size: 13px; }} .stamp code {{ color: #1d2230; }}
   .total {{ font-size: 40px; font-weight: 700; letter-spacing: -.03em; }}
   .total small {{ font-size: 14px; font-weight: 400; color: #6a7080; margin-left: 8px; }}
@@ -122,24 +163,39 @@ def write_suite_html(report: dict[str, Any], output_dir: Path, base_name: str) -
   .meta h5 {{ margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #6a7080; }}
   .meta ul {{ margin: 0; padding-left: 16px; }}
   .empty {{ color: #6a7080; }}
+  .lead {{ color: #4a5060; margin: 0 0 10px; }}
+  .counts {{ display: flex; gap: 32px; align-items: baseline; }}
+  .counts .n {{ font-size: 40px; font-weight: 700; letter-spacing: -.03em; }}
+  .counts .n.obs {{ font-size: 26px; color: #6a7080; }}
+  .counts small {{ font-size: 13px; color: #6a7080; margin-left: 6px; }}
+  table.ev {{ width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 4px; }}
+  table.ev td {{ padding: 3px 8px; border-bottom: 1px solid #eee; vertical-align: top; }}
+  table.ev td:first-child {{ color: #6a7080; white-space: nowrap; width: 1%; }}
+  ul.checks {{ columns: 2; margin: 0; }}
   {sev_css}
   {border_css}
-  footer {{ margin-top: 50px; color: #9a9aa2; font-size: 12px; }}
   @media print {{ body {{ background: #fff; }} .finding {{ break-inside: avoid; }} }}
 </style></head>
 <body><div class="wrap">
   <header class="report">
-    <span class="eyebrow">DREAD / unified security report</span>
     <h1>{title}</h1>
+    {subtitle}
     <div class="stamp">Run <code>{_esc(report.get('run_id'))}</code> &middot; generated {_esc(report.get('generated_at'))}</div>
   </header>
-  <div class="total">{_esc(total)}<small>total findings</small></div>
+  <div class="counts">
+    <div><span class="n">{_esc(vuln_count)}</span><small>vulnerabilit{'y' if vuln_count == 1 else 'ies'}</small></div>
+    <div><span class="n obs">{_esc(obs_count)}</span><small>observation{'' if obs_count == 1 else 's'} (not vulnerabilities)</small></div>
+  </div>
   <div class="chips">{chips}</div>
-  <h2>Sources</h2>
-  {sources_html}
-  <h2>Findings</h2>
-  {findings_html}
-  <footer>DREAD unified suite report &middot; schema {_esc(report.get('reports_schema_version'))}</footer>
+  <h2>Assessment scope</h2>
+  {scope_html}
+  {checks_html}
+  <h2>Vulnerabilities ({_esc(vuln_count)})</h2>
+  <p class="lead">Issues that should be remediated, most severe first.</p>
+  {vulns_html}
+  <h2>Observations ({_esc(obs_count)})</h2>
+  <p class="lead">Informational items and hardening opportunities. These are not vulnerabilities.</p>
+  {obs_html}
 </div></body></html>"""
 
     html_path.write_text(doc, encoding="utf-8")

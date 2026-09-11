@@ -36,6 +36,9 @@ SCAN_PROFILES = {
             "web_vulnerabilities",
             "access_control",
             "cve_correlation",
+            "api_discovery",
+            "cors_check",
+            "misconfiguration",
         ],
     },
     "standard": {
@@ -55,6 +58,9 @@ SCAN_PROFILES = {
             "web_vulnerabilities",
             "access_control",
             "cve_correlation",
+            "api_discovery",
+            "cors_check",
+            "misconfiguration",
         ],
     },
     "full": {
@@ -65,6 +71,7 @@ SCAN_PROFILES = {
         "rate_limit": 2.0,
         "timeout": 60,
         "parallel_workers": 16,
+        "render_js": True,
         "enabled_plugins": [
             "fingerprinting",
             "security_headers",
@@ -74,6 +81,9 @@ SCAN_PROFILES = {
             "web_vulnerabilities",
             "access_control",
             "cve_correlation",
+            "api_discovery",
+            "cors_check",
+            "misconfiguration",
             "network_scanner",
             "infrastructure",
         ],
@@ -106,24 +116,32 @@ class ScanConfig:
     def __init__(
         self,
         target_url: str,
-        depth: int = 2,
-        max_urls: int = 50,
-        rate_limit: float = 1.0,
+        depth: Optional[int] = None,
+        max_urls: Optional[int] = None,
+        rate_limit: Optional[float] = None,
         enabled_plugins: Optional[List[str]] = None,
         output_name: Optional[str] = None,
         output_formats: Optional[List[str]] = None,
         output_dir: str = "REPORTS",
-        parallel_workers: int = 8,
+        parallel_workers: Optional[int] = None,
         profile: Optional[str] = None,
         verbose: bool = False,
         active_scan_mode: str = "safe",
+        render_js: Optional[bool] = None,
         auth: Optional[Dict[str, Any]] = None,
         auth_secondary: Optional[Dict[str, Any]] = None,
         cookies: Optional[Dict[str, str]] = None,
         extra_headers: Optional[Dict[str, str]] = None,
     ):
-        # Apply profile settings first, then override with explicit parameters
+        # Precedence for each setting: explicit argument > profile value > built-in
+        # default. Passing None means "not specified", so an explicit --depth always
+        # wins over a --profile, and a profile always wins over the hard default.
         profile_config = self._get_profile_config(profile)
+
+        def _resolve(value, key, default):
+            if value is not None:
+                return value
+            return profile_config.get(key, default)
 
         # Authentication / session context (see scanner.auth).
         # ``auth`` is the primary identity; ``auth_secondary`` is an optional
@@ -134,16 +152,17 @@ class ScanConfig:
         self.extra_headers = extra_headers
         
         self.target_url = self._normalize_target_url(target_url)
-        self.depth = depth if profile is None else profile_config.get("depth", depth)
-        self.max_urls = max_urls if profile is None else profile_config.get("max_urls", max_urls)
-        self.rate_limit = rate_limit if profile is None else profile_config.get("rate_limit", rate_limit)
-        self.parallel_workers = parallel_workers if profile is None else profile_config.get("parallel_workers", parallel_workers)
+        self.depth = _resolve(depth, "depth", 2)
+        self.max_urls = _resolve(max_urls, "max_urls", 50)
+        self.rate_limit = _resolve(rate_limit, "rate_limit", 1.0)
+        self.parallel_workers = _resolve(parallel_workers, "parallel_workers", 8)
+        self.render_js = _resolve(render_js, "render_js", False)
         self.output_name = output_name
         self.output_formats = output_formats or ["json", "md", "pdf"]
         self.output_dir = output_dir
         self.verbose = verbose
-        self.active_scan_mode = (
-            active_scan_mode if profile is None else profile_config.get("active_scan_mode", active_scan_mode)
+        self.active_scan_mode = _resolve(
+            None if active_scan_mode == "safe" else active_scan_mode, "active_scan_mode", active_scan_mode
         )
         
         # Use profile plugins or default to all
@@ -158,6 +177,9 @@ class ScanConfig:
                 "web_vulnerabilities",
                 "access_control",
                 "cve_correlation",
+                "api_discovery",
+                "cors_check",
+                "misconfiguration",
                 "network_scanner",
                 "tls_analysis",
                 "infrastructure",
@@ -171,6 +193,9 @@ class ScanConfig:
                 "web_vulnerabilities",
                 "access_control",
                 "cve_correlation",
+                "api_discovery",
+                "cors_check",
+                "misconfiguration",
                 "network_scanner",
                 "tls_analysis",
             ]

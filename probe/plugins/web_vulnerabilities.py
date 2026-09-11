@@ -9,27 +9,39 @@ from requests.exceptions import RequestException
 
 from plugins.base_plugin import BasePlugin, Finding
 from scanner.active_checks import (
+    css_injection,
     dom_xss,
     command_injection,
     file_inclusion,
+    prototype_pollution,
     redirects,
     reflected_xss,
     sql_errors,
+    sqli_boolean,
     ssti,
     traversal,
+    xss_attribute,
 )
 from scanner.active_checks.context import ActiveScanContext, OriginState
 
 
 MAX_PARAMETERS = 6
+# Some checks send many probes per parameter (traversal tries ~13 encodings, blind
+# SQLi 8, SSTI 5). Budget generously per parameter so every parameter is fully
+# tested; the crawler's URL cap and the rate limiter bound total scan volume.
+MAX_PROBES_PER_PARAMETER = 50
 CHECKS = [
     reflected_xss.check,
+    xss_attribute.check,
+    css_injection.check,
     sql_errors.check,
+    sqli_boolean.check,
     traversal.check,
     redirects.check,
     command_injection.check,
     ssti.check,
     file_inclusion.check,
+    prototype_pollution.check,
 ]
 
 
@@ -176,6 +188,44 @@ def discover_get_targets(url: str, html: str) -> List[tuple[str, Dict]]:
     return targets
 
 
+def _query_target(url: str) -> List[tuple[str, Dict]]:
+    """The (endpoint, params) target for a URL's own query string, if any and same-origin."""
+    if _origin(url) is None:
+        return []
+    parsed = urlparse(url)
+    query = _parameter_values(parse_qsl(parsed.query, keep_blank_values=True))
+    if not query:
+        return []
+    return [(urlunparse(parsed._replace(query="", fragment="")), query)]
+
+
+def discover_post_targets(url: str, html: str) -> List[tuple[str, Dict]]:
+    """Same-origin POST forms and their default field values, for body injection."""
+    origin = _origin(url)
+    if origin is None:
+        return []
+    targets: List[tuple[str, Dict]] = []
+    soup = BeautifulSoup(html, "html.parser")
+    for form in soup.find_all("form"):
+        if form.get("method", "get").lower() != "post":
+            continue
+        try:
+            action = urljoin(url, form.get("action") or url)
+            action_parsed = urlparse(action)
+        except ValueError:
+            continue
+        if _origin(action) != origin:
+            continue
+        values = _form_values(form)
+        if not values:
+            continue
+        endpoint = urlunparse(action_parsed._replace(fragment=""))
+        target = (endpoint, values)
+        if target not in targets:
+            targets.append(target)
+    return targets
+
+
 class WebVulnerabilitiesPlugin(BasePlugin):
     def get_name(self) -> str:
         return "web_vulnerabilities"
@@ -200,38 +250,72 @@ class WebVulnerabilitiesPlugin(BasePlugin):
         if _origin(response_url) != _origin(page_url):
             return []
 
+        # One dispatcher so the active checks can drive GET or POST identically; the
+        # context decides whether a mutated payload becomes a query string or a body.
+        def _send(method="GET", **kwargs):
+            fn = request_handler.post if method.upper() == "POST" else request_handler.get
+            return fn(**kwargs)
+
         findings = dom_xss.scan_dom(response_url) if is_html else []
-        tested = 0
-        origin_states = {}
-        targets = (
-            discover_get_targets(response_url, page.text)
-            if is_html
-            else discover_json_targets(response_url, page.text)
-        )
-        for endpoint, params in targets:
-            baseline = request_handler.get(endpoint, params=params, allow_redirects=False)
-            if baseline is None:
-                continue
-            baseline_sql = {
-                pattern.pattern
-                for pattern in sql_errors.SQL_ERRORS
-                if pattern.search(baseline.text)
-            }
-            endpoint_origin = _origin(endpoint)
-            context = ActiveScanContext(
-                endpoint,
-                endpoint_origin,
-                baseline,
-                params,
-                request_handler.get,
-                endpoint_budget=MAX_PARAMETERS * (len(CHECKS) + 3),
-                baseline_sql=baseline_sql,
-                origin_state=origin_states.setdefault(endpoint_origin, OriginState(240)),
-            )
-            for parameter in params:
-                if tested >= MAX_PARAMETERS:
-                    return findings
-                tested += 1
-                for check in CHECKS:
-                    findings.extend(check(context, parameter))
+        self._tested = 0
+        origin_states: Dict = {}
+
+        if is_html:
+            get_targets = discover_get_targets(response_url, page.text)
+            # Recover the requested URL's own query parameters: a URL that itself
+            # redirects (e.g. /go?next=..) loses them once we follow to the final page,
+            # and with them the very endpoint we need to test. Forms still resolve
+            # against the final URL only (handled above).
+            for extra in _query_target(page_url):
+                if extra not in get_targets:
+                    get_targets.append(extra)
+            post_targets = discover_post_targets(response_url, page.text)
+        else:
+            get_targets = discover_json_targets(response_url, page.text)
+            post_targets = []
+
+        for endpoint, params in get_targets:
+            if not self._run_targets(endpoint, params, "GET", "query", _send,
+                                     request_handler, origin_states, findings):
+                return findings
+        for endpoint, params in post_targets:
+            if not self._run_targets(endpoint, params, "POST", "form", _send,
+                                     request_handler, origin_states, findings):
+                return findings
         return findings
+
+    def _run_targets(self, endpoint, params, method, location, send,
+                     request_handler, origin_states, findings) -> bool:
+        """Inject into one endpoint's params. Returns False when the global budget is spent."""
+        if method == "POST":
+            baseline = request_handler.post(endpoint, data=params, allow_redirects=False)
+        else:
+            baseline = request_handler.get(endpoint, params=params, allow_redirects=False)
+        if baseline is None:
+            return True
+        baseline_sql = {
+            pattern.pattern
+            for pattern in sql_errors.SQL_ERRORS
+            if pattern.search(baseline.text)
+        }
+        endpoint_origin = _origin(endpoint)
+        context = ActiveScanContext(
+            endpoint,
+            endpoint_origin,
+            baseline,
+            params,
+            send,
+            endpoint_budget=MAX_PARAMETERS * MAX_PROBES_PER_PARAMETER,
+            baseline_sql=baseline_sql,
+            origin_state=origin_states.setdefault(
+                endpoint_origin, OriginState(MAX_PARAMETERS * MAX_PROBES_PER_PARAMETER * 2)),
+            method=method,
+            location=location,
+        )
+        for parameter in params:
+            if self._tested >= MAX_PARAMETERS:
+                return False
+            self._tested += 1
+            for check in CHECKS:
+                findings.extend(check(context, parameter))
+        return True

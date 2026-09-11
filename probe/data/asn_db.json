@@ -7,8 +7,8 @@
       "https://ftp.lacnic.net/pub/stats/lacnic/delegated-lacnic-latest",
       "https://ftp.afrinic.net/pub/stats/afrinic/delegated-afrinic-extended-latest"
     ],
-    "last_updated": "2026-09-07T14:38:32.450391+00:00",
-    "total_asns": 126470
+    "last_updated": "2026-09-10T22:26:06.984134+00:00",
+    "total_asns": 126513
   },
   "asns": {
     "7": {
@@ -16799,12 +16799,6 @@
       "status": "allocated",
       "allocated": "20000710"
     },
-    "15478": {
-      "registry": "ripencc",
-      "country": "PL",
-      "status": "allocated",
-      "allocated": "20150914"
-    },
     "15479": {
       "registry": "ripencc",
       "country": "DE",
@@ -25496,12 +25490,6 @@
     "24924": {
       "registry": "ripencc",
       "country": "RU",
-      "status": "allocated",
-      "allocated": "20020523"
-    },
-    "24925": {
-      "registry": "ripencc",
-      "country": "CH",
       "status": "allocated",
       "allocated": "20020523"
     },
@@ -34759,7 +34747,7 @@
     },
     "31368": {
       "registry": "ripencc",
-      "country": "RU",
+      "country": "CZ",
       "status": "allocated",
       "allocated": "20040427"
     },
@@ -42908,12 +42896,6 @@
     "35299": {
       "registry": "ripencc",
       "country": "GB",
-      "status": "allocated",
-      "allocated": "20050711"
-    },
-    "35300": {
-      "registry": "ripencc",
-      "country": "FR",
       "status": "allocated",
       "allocated": "20050711"
     },
@@ -78559,7 +78541,7 @@
     },
     "48618": {
       "registry": "ripencc",
-      "country": "FI",
+      "country": "SE",
       "status": "allocated",
       "allocated": "20081218"
     },
@@ -102407,12 +102389,6 @@
       "status": "allocated",
       "allocated": "20151208"
     },
-    "57185": {
-      "registry": "ripencc",
-      "country": "RO",
-      "status": "allocated",
-      "allocated": "20110815"
-    },
     "57187": {
       "registry": "ripencc",
       "country": "AE",
@@ -102890,12 +102866,6 @@
     "57280": {
       "registry": "ripencc",
       "country": "NO",
-      "status": "allocated",
-      "allocated": "20110914"
-    },
-    "57281": {
-      "registry": "ripencc",
-      "country": "RU",
       "status": "allocated",
       "allocated": "20110914"
     },
@@ -103660,12 +103630,6 @@
       "country": "TW",
       "status": "allocated",
       "allocated": "20220307"
-    },
-    "57430": {
-      "registry": "ripencc",
-      "country": "PL",
-      "status": "allocated",
-      "allocated": "20160607"
     },
     "57431": {
       "registry": "ripencc",
@@ -114706,12 +114670,6 @@
       "country": "US",
       "status": "allocated",
       "allocated": "20130703"
-    },
-    "60528": {
-      "registry": "ripencc",
-      "country": "BZ",
-      "status": "allocated",
-      "allocated": "20230601"
     },
     "60529": {
       "registry": "ripencc",
@@ -137009,12 +136967,6 @@
       "status": "allocated",
       "allocated": "20121002"
     },
-    "199247": {
-      "registry": "ripencc",
-      "country": "CY",
-      "status": "allocated",
-      "allocated": "20121003"
-    },
     "199248": {
       "registry": "ripencc",
       "country": "FR",
@@ -153365,12 +153317,6 @@
       "status": "allocated",
       "allocated": "20140422"
     },
-    "202076": {
-      "registry": "ripencc",
-      "country": "GB",
-      "status": "allocated",
-      "allocated": "20260123"
-    },
     "202077": {
       "registry": "ripencc",
       "country": "DE",
@@ -154415,12 +154361,6 @@
       "status": "allocated",
       "allocated": "20180618"
     },
-    "202255": {
-      "registry": "ripencc",
-      "country": "GB",
-      "status": "allocated",
-      "allocated": "20221014"
-    },
     "202256": {
       "registry": "ripencc",
       "country": "CN",
@@ -154589,12 +154529,6 @@
       "status": "allocated",
       "allocated": "20180612"
     },
-    "202284": {
-      "registry": "ripencc",
-      "country": "DE",
-      "status": "allocated",
-      "allocated": "20180612"
-    },
     "202285": {
       "registry": "ripencc",
       "country": "DE",
@@ -154702,12 +154636,6 @@
       "country": "TR",
       "status": "allocated",
       "allocated": "20260126"
-    },
-    "202304": {
-      "registry": "ripencc",
-      "country": "LT",
-      "status": "allocated",
-      "allocated": "20180606"
     },
     "202305": {
       "registry": "ripencc",
@@ -161191,7 +161119,7 @@
     },
     "203444": {
       "registry": "ripencc",
-      "country": "RU",
+      "country": "ES",
       "status": "allocated",
       "allocated": "20160118"
     },
@@ -174641,12 +174569,6 @@
       "status": "allocated",
       "allocated": "20170609"
     },
-    "205759": {
-      "registry": "ripencc",
-      "country": "US",
-      "status": "allocated",
-      "allocated": "20260120"
-    },
     "205760": {
       "registry": "ripencc",
       "country": "DK",
@@ -174736,12 +174658,6 @@
       "country": "HR",
       "status": "allocated",
       "allocated": "20200403"
-    },
-    "205775": {
-      "registry": "ripencc",
-      "country": "US",
-      "status": "allocated",
-      "allocated": "20260120"
     },
     "205776": {
       "registry": "ripencc",
@@ -182825,12 +182741,6 @@
       "status": "allocated",
       "allocated": "20250606"
     },
-    "207184": {
-      "registry": "ripencc",
-      "country": "ZW",
-      "status": "allocated",
-      "allocated": "20250606"
-    },
     "207185": {
       "registry": "ripencc",
       "country": "ES",
@@ -183239,12 +183149,6 @@
       "status": "allocated",
       "allocated": "20160802"
     },
-    "207256": {
-      "registry": "ripencc",
-      "country": "RU",
-      "status": "allocated",
-      "allocated": "20160802"
-    },
     "207257": {
       "registry": "ripencc",
       "country": "NL",
@@ -183526,12 +183430,6 @@
       "country": "FI",
       "status": "allocated",
       "allocated": "20250704"
-    },
-    "207307": {
-      "registry": "ripencc",
-      "country": "NO",
-      "status": "allocated",
-      "allocated": "20200302"
     },
     "207308": {
       "registry": "ripencc",
@@ -185951,12 +185849,6 @@
       "status": "allocated",
       "allocated": "20191203"
     },
-    "207743": {
-      "registry": "ripencc",
-      "country": "RO",
-      "status": "allocated",
-      "allocated": "20191203"
-    },
     "207744": {
       "registry": "ripencc",
       "country": "RU",
@@ -188087,12 +187979,6 @@
       "status": "allocated",
       "allocated": "20190927"
     },
-    "208134": {
-      "registry": "ripencc",
-      "country": "DE",
-      "status": "allocated",
-      "allocated": "20190927"
-    },
     "208135": {
       "registry": "ripencc",
       "country": "DE",
@@ -188224,12 +188110,6 @@
       "country": "FR",
       "status": "allocated",
       "allocated": "20190924"
-    },
-    "208158": {
-      "registry": "ripencc",
-      "country": "PT",
-      "status": "allocated",
-      "allocated": "20190923"
     },
     "208159": {
       "registry": "ripencc",
@@ -189680,12 +189560,6 @@
     "208414": {
       "registry": "ripencc",
       "country": "CZ",
-      "status": "allocated",
-      "allocated": "20190808"
-    },
-    "208415": {
-      "registry": "ripencc",
-      "country": "CY",
       "status": "allocated",
       "allocated": "20190808"
     },
@@ -203357,12 +203231,6 @@
       "status": "allocated",
       "allocated": "20250610"
     },
-    "210815": {
-      "registry": "ripencc",
-      "country": "US",
-      "status": "allocated",
-      "allocated": "20250404"
-    },
     "210816": {
       "registry": "ripencc",
       "country": "TR",
@@ -213365,12 +213233,6 @@
       "status": "allocated",
       "allocated": "20250226"
     },
-    "212592": {
-      "registry": "ripencc",
-      "country": "DE",
-      "status": "allocated",
-      "allocated": "20200928"
-    },
     "212593": {
       "registry": "ripencc",
       "country": "RO",
@@ -214940,12 +214802,6 @@
     "212873": {
       "registry": "ripencc",
       "country": "IM",
-      "status": "allocated",
-      "allocated": "20200724"
-    },
-    "212874": {
-      "registry": "ripencc",
-      "country": "AT",
       "status": "allocated",
       "allocated": "20200724"
     },
@@ -218243,12 +218099,6 @@
       "status": "allocated",
       "allocated": "20250205"
     },
-    "213465": {
-      "registry": "ripencc",
-      "country": "US",
-      "status": "allocated",
-      "allocated": "20250205"
-    },
     "213466": {
       "registry": "ripencc",
       "country": "FR",
@@ -219143,12 +218993,6 @@
       "status": "allocated",
       "allocated": "20250103"
     },
-    "213636": {
-      "registry": "ripencc",
-      "country": "UA",
-      "status": "allocated",
-      "allocated": "20250103"
-    },
     "213637": {
       "registry": "ripencc",
       "country": "TR",
@@ -219470,12 +219314,6 @@
     "213695": {
       "registry": "ripencc",
       "country": "NL",
-      "status": "allocated",
-      "allocated": "20241218"
-    },
-    "213696": {
-      "registry": "ripencc",
-      "country": "GB",
       "status": "allocated",
       "allocated": "20241218"
     },
@@ -224795,12 +224633,6 @@
       "status": "allocated",
       "allocated": "20250730"
     },
-    "214717": {
-      "registry": "ripencc",
-      "country": "HK",
-      "status": "allocated",
-      "allocated": "20250211"
-    },
     "214718": {
       "registry": "ripencc",
       "country": "IS",
@@ -225430,12 +225262,6 @@
       "country": "NL",
       "status": "allocated",
       "allocated": "20250904"
-    },
-    "214848": {
-      "registry": "ripencc",
-      "country": "CN",
-      "status": "allocated",
-      "allocated": "20240522"
     },
     "214849": {
       "registry": "ripencc",
@@ -234221,6 +234047,336 @@
       "status": "allocated",
       "allocated": "20230814"
     },
+    "218701": {
+      "registry": "ripencc",
+      "country": "US",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "218702": {
+      "registry": "ripencc",
+      "country": "AM",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "218703": {
+      "registry": "ripencc",
+      "country": "GB",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "218704": {
+      "registry": "ripencc",
+      "country": "RU",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "218705": {
+      "registry": "ripencc",
+      "country": "GB",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "218706": {
+      "registry": "ripencc",
+      "country": "RU",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "218707": {
+      "registry": "ripencc",
+      "country": "DK",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "218708": {
+      "registry": "ripencc",
+      "country": "TJ",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "218709": {
+      "registry": "ripencc",
+      "country": "LB",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "218710": {
+      "registry": "ripencc",
+      "country": "HK",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "218711": {
+      "registry": "ripencc",
+      "country": "DE",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "218712": {
+      "registry": "ripencc",
+      "country": "RU",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "218713": {
+      "registry": "ripencc",
+      "country": "GB",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "218714": {
+      "registry": "ripencc",
+      "country": "IN",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "218715": {
+      "registry": "ripencc",
+      "country": "FR",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "218716": {
+      "registry": "ripencc",
+      "country": "PL",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "218717": {
+      "registry": "ripencc",
+      "country": "BR",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "218718": {
+      "registry": "ripencc",
+      "country": "CR",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "218719": {
+      "registry": "ripencc",
+      "country": "RU",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "218720": {
+      "registry": "ripencc",
+      "country": "PL",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "218721": {
+      "registry": "ripencc",
+      "country": "RO",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "218722": {
+      "registry": "ripencc",
+      "country": "PL",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "218723": {
+      "registry": "ripencc",
+      "country": "DK",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "218724": {
+      "registry": "ripencc",
+      "country": "IR",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "218725": {
+      "registry": "ripencc",
+      "country": "UA",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "218726": {
+      "registry": "ripencc",
+      "country": "GB",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "218727": {
+      "registry": "ripencc",
+      "country": "IL",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "218728": {
+      "registry": "ripencc",
+      "country": "DE",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "218729": {
+      "registry": "ripencc",
+      "country": "HK",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "218730": {
+      "registry": "ripencc",
+      "country": "PL",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "218731": {
+      "registry": "ripencc",
+      "country": "LV",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "218732": {
+      "registry": "ripencc",
+      "country": "IR",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "218733": {
+      "registry": "ripencc",
+      "country": "HK",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "218734": {
+      "registry": "ripencc",
+      "country": "US",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "218735": {
+      "registry": "ripencc",
+      "country": "LT",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "218736": {
+      "registry": "ripencc",
+      "country": "GB",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "218737": {
+      "registry": "ripencc",
+      "country": "US",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "218738": {
+      "registry": "ripencc",
+      "country": "RU",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "218739": {
+      "registry": "ripencc",
+      "country": "US",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "218740": {
+      "registry": "ripencc",
+      "country": "UA",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "218741": {
+      "registry": "ripencc",
+      "country": "US",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "218742": {
+      "registry": "ripencc",
+      "country": "GB",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "218743": {
+      "registry": "ripencc",
+      "country": "HK",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "218744": {
+      "registry": "ripencc",
+      "country": "GB",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "218745": {
+      "registry": "ripencc",
+      "country": "PL",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "218746": {
+      "registry": "ripencc",
+      "country": "TR",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
+    "218747": {
+      "registry": "ripencc",
+      "country": "GB",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
+    "218748": {
+      "registry": "ripencc",
+      "country": "GB",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
+    "218749": {
+      "registry": "ripencc",
+      "country": "RU",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
+    "218750": {
+      "registry": "ripencc",
+      "country": "RU",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
+    "218751": {
+      "registry": "ripencc",
+      "country": "US",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
+    "218752": {
+      "registry": "ripencc",
+      "country": "MK",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
+    "218753": {
+      "registry": "ripencc",
+      "country": "CH",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
+    "218754": {
+      "registry": "ripencc",
+      "country": "GB",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
+    "218755": {
+      "registry": "ripencc",
+      "country": "HU",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
     "218756": {
       "registry": "ripencc",
       "country": "CH",
@@ -234587,12 +234743,6 @@
       "status": "allocated",
       "allocated": "20260831"
     },
-    "218817": {
-      "registry": "ripencc",
-      "country": "GB",
-      "status": "allocated",
-      "allocated": "20260831"
-    },
     "218818": {
       "registry": "ripencc",
       "country": "GB",
@@ -234864,12 +235014,6 @@
       "allocated": "20260825"
     },
     "218863": {
-      "registry": "ripencc",
-      "country": "GB",
-      "status": "allocated",
-      "allocated": "20260825"
-    },
-    "218864": {
       "registry": "ripencc",
       "country": "GB",
       "status": "allocated",
@@ -244309,9 +244453,9 @@
     },
     "952": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20220622"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "953": {
       "registry": "arin",
@@ -249247,9 +249391,9 @@
     },
     "2145": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20200121"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "2149": {
       "registry": "arin",
@@ -285979,9 +286123,9 @@
     },
     "13641": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "19990720"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "13642": {
       "registry": "arin",
@@ -292939,9 +293083,9 @@
     },
     "14881": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20070410"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "14882": {
       "registry": "arin",
@@ -294427,9 +294571,9 @@
     },
     "15143": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20250421"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "15144": {
       "registry": "arin",
@@ -295045,9 +295189,9 @@
     },
     "15255": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20000411"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "15257": {
       "registry": "arin",
@@ -295783,9 +295927,9 @@
     },
     "16404": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20000426"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "16405": {
       "registry": "arin",
@@ -297829,9 +297973,9 @@
     },
     "16773": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20070416"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "16774": {
       "registry": "arin",
@@ -300715,9 +300859,9 @@
     },
     "17290": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20240924"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "17291": {
       "registry": "arin",
@@ -305377,7 +305521,7 @@
     },
     "19139": {
       "registry": "arin",
-      "country": "US",
+      "country": "CA",
       "status": "assigned",
       "allocated": "20001122"
     },
@@ -308887,9 +309031,9 @@
     },
     "19759": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20100310"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "19760": {
       "registry": "arin",
@@ -309643,9 +309787,9 @@
     },
     "19892": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20140411"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "19893": {
       "registry": "arin",
@@ -311539,9 +311683,9 @@
     },
     "20229": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20010409"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "20230": {
       "registry": "arin",
@@ -311863,9 +312007,9 @@
     },
     "20288": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20010418"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "20289": {
       "registry": "arin",
@@ -316081,9 +316225,9 @@
     },
     "22061": {
       "registry": "arin",
-      "country": "",
-      "status": "reserved",
-      "allocated": ""
+      "country": "US",
+      "status": "assigned",
+      "allocated": "20260909"
     },
     "22062": {
       "registry": "arin",
@@ -316909,9 +317053,9 @@
     },
     "22210": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20250424"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "22211": {
       "registry": "arin",
@@ -318277,9 +318421,9 @@
     },
     "22456": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20060420"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "22457": {
       "registry": "arin",
@@ -321061,9 +321205,9 @@
     },
     "22959": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20070426"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "22960": {
       "registry": "arin",
@@ -322483,9 +322627,9 @@
     },
     "23212": {
       "registry": "arin",
-      "country": "",
-      "status": "reserved",
-      "allocated": ""
+      "country": "US",
+      "status": "assigned",
+      "allocated": "20260909"
     },
     "23213": {
       "registry": "arin",
@@ -323209,9 +323353,9 @@
     },
     "23338": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20091112"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "23339": {
       "registry": "arin",
@@ -324823,9 +324967,9 @@
     },
     "25666": {
       "registry": "arin",
-      "country": "",
-      "status": "reserved",
-      "allocated": ""
+      "country": "US",
+      "status": "assigned",
+      "allocated": "20260909"
     },
     "25667": {
       "registry": "arin",
@@ -326455,9 +326599,9 @@
     },
     "25953": {
       "registry": "arin",
-      "country": "",
-      "status": "reserved",
-      "allocated": ""
+      "country": "US",
+      "status": "assigned",
+      "allocated": "20260909"
     },
     "25954": {
       "registry": "arin",
@@ -328615,9 +328759,9 @@
     },
     "26332": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20120425"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "26333": {
       "registry": "arin",
@@ -330517,9 +330661,9 @@
     },
     "26688": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20090424"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "26689": {
       "registry": "arin",
@@ -336235,9 +336379,9 @@
     },
     "27645": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20030417"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "27646": {
       "registry": "arin",
@@ -336391,9 +336535,9 @@
     },
     "29719": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20030422"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "29720": {
       "registry": "arin",
@@ -337393,9 +337537,9 @@
     },
     "29887": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20160503"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "29888": {
       "registry": "arin",
@@ -338203,9 +338347,9 @@
     },
     "30024": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20180423"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "30025": {
       "registry": "arin",
@@ -339523,9 +339667,9 @@
     },
     "30245": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20090427"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "30246": {
       "registry": "arin",
@@ -342661,9 +342805,9 @@
     },
     "31795": {
       "registry": "arin",
-      "country": "",
-      "status": "reserved",
-      "allocated": ""
+      "country": "CA",
+      "status": "assigned",
+      "allocated": "20260909"
     },
     "31796": {
       "registry": "arin",
@@ -342727,9 +342871,9 @@
     },
     "31806": {
       "registry": "arin",
-      "country": "",
-      "status": "reserved",
-      "allocated": ""
+      "country": "US",
+      "status": "assigned",
+      "allocated": "20260909"
     },
     "31807": {
       "registry": "arin",
@@ -344299,9 +344443,9 @@
     },
     "32072": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20130418"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "32073": {
       "registry": "arin",
@@ -344701,9 +344845,9 @@
     },
     "32139": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20100930"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "32140": {
       "registry": "arin",
@@ -345871,9 +346015,9 @@
     },
     "32335": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20040415"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "32336": {
       "registry": "arin",
@@ -350737,9 +350881,9 @@
     },
     "33156": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20080409"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "33157": {
       "registry": "arin",
@@ -356407,9 +356551,9 @@
     },
     "36176": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20090407"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "36177": {
       "registry": "arin",
@@ -356551,9 +356695,9 @@
     },
     "36200": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20140417"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "36201": {
       "registry": "arin",
@@ -358975,9 +359119,9 @@
     },
     "36606": {
       "registry": "arin",
-      "country": "",
-      "status": "reserved",
-      "allocated": ""
+      "country": "US",
+      "status": "assigned",
+      "allocated": "20260909"
     },
     "36607": {
       "registry": "arin",
@@ -359263,9 +359407,9 @@
     },
     "36654": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20180425"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "36655": {
       "registry": "arin",
@@ -359857,9 +360001,9 @@
     },
     "36753": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20060406"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "36754": {
       "registry": "arin",
@@ -360037,9 +360181,9 @@
     },
     "36783": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20060426"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "36784": {
       "registry": "arin",
@@ -360091,9 +360235,9 @@
     },
     "36792": {
       "registry": "arin",
-      "country": "CA",
-      "status": "assigned",
-      "allocated": "20140422"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "36793": {
       "registry": "arin",
@@ -360733,9 +360877,9 @@
     },
     "39968": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20140424"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "39969": {
       "registry": "arin",
@@ -361309,9 +361453,9 @@
     },
     "40064": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20250829"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "40065": {
       "registry": "arin",
@@ -362647,9 +362791,9 @@
     },
     "40287": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20110412"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "40288": {
       "registry": "arin",
@@ -363439,9 +363583,9 @@
     },
     "40419": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20250326"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "40420": {
       "registry": "arin",
@@ -363961,9 +364105,9 @@
     },
     "40506": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20110413"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "40507": {
       "registry": "arin",
@@ -364459,9 +364603,9 @@
     },
     "40589": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20130422"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "40590": {
       "registry": "arin",
@@ -366919,9 +367063,9 @@
     },
     "46117": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20110421"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "46118": {
       "registry": "arin",
@@ -367538,7 +367682,7 @@
     "46220": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "46221": {
@@ -370261,7 +370405,7 @@
     },
     "46675": {
       "registry": "arin",
-      "country": "US",
+      "country": "CA",
       "status": "assigned",
       "allocated": "20121120"
     },
@@ -371611,9 +371755,9 @@
     },
     "46901": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20090416"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "46902": {
       "registry": "arin",
@@ -373088,7 +373232,7 @@
     "53279": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "53280": {
@@ -375409,9 +375553,9 @@
     },
     "53666": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20200909"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "53667": {
       "registry": "arin",
@@ -378217,9 +378361,9 @@
     },
     "54134": {
       "registry": "arin",
-      "country": "CA",
-      "status": "assigned",
-      "allocated": "20250429"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "54135": {
       "registry": "arin",
@@ -381566,7 +381710,7 @@
     "54694": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "54695": {
@@ -387530,7 +387674,7 @@
     "62847": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "62848": {
@@ -390548,7 +390692,7 @@
     "63352": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "63353": {
@@ -393224,14 +393368,14 @@
     "393402": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "393403": {
       "registry": "arin",
-      "country": "",
-      "status": "reserved",
-      "allocated": ""
+      "country": "US",
+      "status": "assigned",
+      "allocated": "20260908"
     },
     "393404": {
       "registry": "arin",
@@ -393338,7 +393482,7 @@
     "393421": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "393422": {
@@ -393800,7 +393944,7 @@
     "393498": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "393499": {
@@ -396476,7 +396620,7 @@
     "393944": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "393945": {
@@ -396992,7 +397136,7 @@
     "394030": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "394031": {
@@ -398030,7 +398174,7 @@
     "394203": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "394204": {
@@ -399895,9 +400039,9 @@
     },
     "394514": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20151002"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "394515": {
       "registry": "arin",
@@ -400304,7 +400448,7 @@
     "394582": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "394583": {
@@ -403994,7 +404138,7 @@
     "395197": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "395198": {
@@ -404006,7 +404150,7 @@
     "395199": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "395200": {
@@ -405278,7 +405422,7 @@
     "395411": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "395412": {
@@ -406015,9 +406159,9 @@
     },
     "395534": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20190416"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "395535": {
       "registry": "arin",
@@ -408079,9 +408223,9 @@
     },
     "395878": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20250402"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "395879": {
       "registry": "arin",
@@ -409670,7 +409814,7 @@
     "396144": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "396145": {
@@ -409969,9 +410113,9 @@
     },
     "396194": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20170404"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "396195": {
       "registry": "arin",
@@ -409999,9 +410143,9 @@
     },
     "396199": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20170404"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "396200": {
       "registry": "arin",
@@ -410173,9 +410317,9 @@
     },
     "396228": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20170410"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "396229": {
       "registry": "arin",
@@ -410365,9 +410509,9 @@
     },
     "396260": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20170418"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "396261": {
       "registry": "arin",
@@ -410564,7 +410708,7 @@
     "396293": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "396294": {
@@ -410840,7 +410984,7 @@
     "396339": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "396340": {
@@ -411284,7 +411428,7 @@
     "396413": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "396414": {
@@ -411980,7 +412124,7 @@
     "396529": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "396530": {
@@ -413797,9 +413941,9 @@
     },
     "396832": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20180411"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "396833": {
       "registry": "arin",
@@ -413954,7 +414098,7 @@
     "396858": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "396859": {
@@ -414061,9 +414205,9 @@
     },
     "396876": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20180517"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "396877": {
       "registry": "arin",
@@ -414578,7 +414722,7 @@
     "396962": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "396963": {
@@ -417740,7 +417884,7 @@
     "397490": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "397491": {
@@ -417800,7 +417944,7 @@
     "397500": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "397501": {
@@ -417841,9 +417985,9 @@
     },
     "397507": {
       "registry": "arin",
-      "country": "CA",
-      "status": "assigned",
-      "allocated": "20190424"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "397508": {
       "registry": "arin",
@@ -418694,7 +418838,7 @@
     "397649": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "397650": {
@@ -420991,9 +421135,9 @@
     },
     "398032": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20240424"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "398033": {
       "registry": "arin",
@@ -422773,9 +422917,9 @@
     },
     "398329": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20200427"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "398330": {
       "registry": "arin",
@@ -422840,7 +422984,7 @@
     "398340": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "398341": {
@@ -423062,7 +423206,7 @@
     "398377": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "398378": {
@@ -423308,7 +423452,7 @@
     "398418": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "398419": {
@@ -426860,7 +427004,7 @@
     "399010": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "399011": {
@@ -428473,9 +428617,9 @@
     },
     "399279": {
       "registry": "arin",
-      "country": "CA",
-      "status": "assigned",
-      "allocated": "20210125"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "399280": {
       "registry": "arin",
@@ -428582,7 +428726,7 @@
     "399297": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "399298": {
@@ -429512,7 +429656,7 @@
     "399452": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "399453": {
@@ -429985,9 +430129,9 @@
     },
     "399531": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20210407"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "399532": {
       "registry": "arin",
@@ -430099,9 +430243,9 @@
     },
     "399550": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20210413"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "399551": {
       "registry": "arin",
@@ -430189,9 +430333,9 @@
     },
     "399565": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20210414"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "399566": {
       "registry": "arin",
@@ -430286,7 +430430,7 @@
     "399581": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "399582": {
@@ -430670,7 +430814,7 @@
     "399645": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "399646": {
@@ -430820,7 +430964,7 @@
     "399670": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "399671": {
@@ -430892,13 +431036,13 @@
     "399682": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "399683": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "399684": {
@@ -431384,7 +431528,7 @@
     "399764": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "399765": {
@@ -431419,9 +431563,9 @@
     },
     "399770": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20210610"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "399771": {
       "registry": "arin",
@@ -431474,7 +431618,7 @@
     "399779": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "399780": {
@@ -431522,7 +431666,7 @@
     "399787": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "399788": {
@@ -431558,7 +431702,7 @@
     "399793": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "399794": {
@@ -431582,7 +431726,7 @@
     "399797": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "399798": {
@@ -432956,7 +433100,7 @@
     "400026": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "400027": {
@@ -434839,9 +434983,9 @@
     },
     "400341": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20211229"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "400342": {
       "registry": "arin",
@@ -436393,9 +436537,9 @@
     },
     "400600": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20220404"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "400601": {
       "registry": "arin",
@@ -436423,9 +436567,9 @@
     },
     "400605": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20250408"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "400606": {
       "registry": "arin",
@@ -436466,7 +436610,7 @@
     "400612": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "400613": {
@@ -436693,9 +436837,9 @@
     },
     "400650": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20220418"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "400651": {
       "registry": "arin",
@@ -437972,7 +438116,7 @@
     "400863": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "400864": {
@@ -438116,7 +438260,7 @@
     "400887": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "400888": {
@@ -438463,9 +438607,9 @@
     },
     "400945": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20240403"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "400946": {
       "registry": "arin",
@@ -438517,9 +438661,9 @@
     },
     "400954": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20240404"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "400955": {
       "registry": "arin",
@@ -438602,7 +438746,7 @@
     "400968": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "400969": {
@@ -438662,7 +438806,7 @@
     "400978": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "400979": {
@@ -438715,9 +438859,9 @@
     },
     "400987": {
       "registry": "arin",
-      "country": "CA",
-      "status": "assigned",
-      "allocated": "20240415"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "400988": {
       "registry": "arin",
@@ -438787,9 +438931,9 @@
     },
     "400999": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20240417"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "401000": {
       "registry": "arin",
@@ -438890,7 +439034,7 @@
     "401016": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "401017": {
@@ -438901,9 +439045,9 @@
     },
     "401018": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20240423"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "401019": {
       "registry": "arin",
@@ -439190,13 +439334,13 @@
     "401066": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "401067": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "401068": {
@@ -439298,7 +439442,7 @@
     "401084": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "401085": {
@@ -439502,7 +439646,7 @@
     "401118": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "401119": {
@@ -439646,7 +439790,7 @@
     "401142": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "401143": {
@@ -439658,7 +439802,7 @@
     "401144": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "401145": {
@@ -439670,7 +439814,7 @@
     "401146": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "401147": {
@@ -440030,7 +440174,7 @@
     "401206": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "401207": {
@@ -440204,7 +440348,7 @@
     "401235": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "401236": {
@@ -442489,13 +442633,13 @@
     },
     "401616": {
       "registry": "arin",
-      "country": "PA",
-      "status": "assigned",
-      "allocated": "20250409"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "401617": {
       "registry": "arin",
-      "country": "VN",
+      "country": "US",
       "status": "assigned",
       "allocated": "20250116"
     },
@@ -442657,9 +442801,9 @@
     },
     "401644": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20250409"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "401645": {
       "registry": "arin",
@@ -442741,9 +442885,9 @@
     },
     "401658": {
       "registry": "arin",
-      "country": "CA",
-      "status": "assigned",
-      "allocated": "20250414"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "401659": {
       "registry": "arin",
@@ -442759,9 +442903,9 @@
     },
     "401661": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20250414"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "401662": {
       "registry": "arin",
@@ -442921,9 +443065,9 @@
     },
     "401688": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20250417"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "401689": {
       "registry": "arin",
@@ -442945,9 +443089,9 @@
     },
     "401692": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20250418"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "401693": {
       "registry": "arin",
@@ -442975,9 +443119,9 @@
     },
     "401697": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20250418"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "401698": {
       "registry": "arin",
@@ -443660,7 +443804,7 @@
     "401811": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "401812": {
@@ -443701,9 +443845,9 @@
     },
     "401818": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20250709"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "401819": {
       "registry": "arin",
@@ -443995,9 +444139,9 @@
     },
     "401867": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20250724"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "401868": {
       "registry": "arin",
@@ -444697,9 +444841,9 @@
     },
     "401984": {
       "registry": "arin",
-      "country": "US",
-      "status": "assigned",
-      "allocated": "20250916"
+      "country": "",
+      "status": "reserved",
+      "allocated": ""
     },
     "401985": {
       "registry": "arin",
@@ -444860,7 +445004,7 @@
     "402011": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "402012": {
@@ -445412,7 +445556,7 @@
     "402103": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "402104": {
@@ -447302,7 +447446,7 @@
     "402418": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "402419": {
@@ -449360,7 +449504,7 @@
     "402761": {
       "registry": "arin",
       "country": "",
-      "status": "reserved",
+      "status": "available",
       "allocated": ""
     },
     "402762": {
@@ -450679,9 +450823,9 @@
     },
     "402981": {
       "registry": "arin",
-      "country": "",
-      "status": "available",
-      "allocated": ""
+      "country": "US",
+      "status": "assigned",
+      "allocated": "20260908"
     },
     "402982": {
       "registry": "arin",
@@ -463169,12 +463313,6 @@
       "status": "allocated",
       "allocated": "20220614"
     },
-    "9233": {
-      "registry": "apnic",
-      "country": "NZ",
-      "status": "allocated",
-      "allocated": "20000519"
-    },
     "9234": {
       "registry": "apnic",
       "country": "SG",
@@ -464309,24 +464447,6 @@
       "status": "allocated",
       "allocated": "19981016"
     },
-    "9427": {
-      "registry": "apnic",
-      "country": "NZ",
-      "status": "allocated",
-      "allocated": "19981019"
-    },
-    "9428": {
-      "registry": "apnic",
-      "country": "NZ",
-      "status": "allocated",
-      "allocated": "19981019"
-    },
-    "9429": {
-      "registry": "apnic",
-      "country": "NZ",
-      "status": "allocated",
-      "allocated": "19981019"
-    },
     "9430": {
       "registry": "apnic",
       "country": "IN",
@@ -464362,12 +464482,6 @@
       "country": "AU",
       "status": "allocated",
       "allocated": "20021115"
-    },
-    "9436": {
-      "registry": "apnic",
-      "country": "NZ",
-      "status": "allocated",
-      "allocated": "19981102"
     },
     "9437": {
       "registry": "apnic",
@@ -464561,18 +464675,6 @@
       "status": "allocated",
       "allocated": "19981211"
     },
-    "9469": {
-      "registry": "apnic",
-      "country": "NZ",
-      "status": "allocated",
-      "allocated": "19981215"
-    },
-    "9470": {
-      "registry": "apnic",
-      "country": "NZ",
-      "status": "allocated",
-      "allocated": "19981216"
-    },
     "9471": {
       "registry": "apnic",
       "country": "PF",
@@ -464717,12 +464819,6 @@
       "status": "allocated",
       "allocated": "19990222"
     },
-    "9495": {
-      "registry": "apnic",
-      "country": "NZ",
-      "status": "allocated",
-      "allocated": "19990323"
-    },
     "9496": {
       "registry": "apnic",
       "country": "AU",
@@ -464806,12 +464902,6 @@
       "country": "AU",
       "status": "allocated",
       "allocated": "19990409"
-    },
-    "9511": {
-      "registry": "apnic",
-      "country": "NZ",
-      "status": "allocated",
-      "allocated": "19990413"
     },
     "9512": {
       "registry": "apnic",
@@ -465094,12 +465184,6 @@
       "country": "NZ",
       "status": "allocated",
       "allocated": "19990712"
-    },
-    "9561": {
-      "registry": "apnic",
-      "country": "NZ",
-      "status": "allocated",
-      "allocated": "19990713"
     },
     "9562": {
       "registry": "apnic",
@@ -465700,12 +465784,6 @@
       "country": "AU",
       "status": "allocated",
       "allocated": "20151028"
-    },
-    "9662": {
-      "registry": "apnic",
-      "country": "NZ",
-      "status": "allocated",
-      "allocated": "19990910"
     },
     "9663": {
       "registry": "apnic",
@@ -467044,12 +467122,6 @@
       "country": "HK",
       "status": "allocated",
       "allocated": "20190916"
-    },
-    "9887": {
-      "registry": "apnic",
-      "country": "NZ",
-      "status": "allocated",
-      "allocated": "20000225"
     },
     "9888": {
       "registry": "apnic",
@@ -469163,12 +469235,6 @@
       "status": "allocated",
       "allocated": "20001013"
     },
-    "17410": {
-      "registry": "apnic",
-      "country": "NZ",
-      "status": "allocated",
-      "allocated": "20001013"
-    },
     "17411": {
       "registry": "apnic",
       "country": "AF",
@@ -470650,12 +470716,6 @@
       "country": "NZ",
       "status": "allocated",
       "allocated": "20061101"
-    },
-    "17664": {
-      "registry": "apnic",
-      "country": "NZ",
-      "status": "allocated",
-      "allocated": "20010314"
     },
     "17665": {
       "registry": "apnic",
@@ -473728,12 +473788,6 @@
       "country": "TH",
       "status": "allocated",
       "allocated": "20070703"
-    },
-    "18198": {
-      "registry": "apnic",
-      "country": "NZ",
-      "status": "allocated",
-      "allocated": "20020419"
     },
     "18199": {
       "registry": "apnic",
@@ -506735,12 +506789,6 @@
       "status": "allocated",
       "allocated": "20160704"
     },
-    "131261": {
-      "registry": "apnic",
-      "country": "NZ",
-      "status": "allocated",
-      "allocated": "20210610"
-    },
     "131262": {
       "registry": "apnic",
       "country": "IN",
@@ -517402,12 +517450,6 @@
       "country": "AF",
       "status": "allocated",
       "allocated": "20130903"
-    },
-    "133067": {
-      "registry": "apnic",
-      "country": "FJ",
-      "status": "allocated",
-      "allocated": "20171004"
     },
     "133068": {
       "registry": "apnic",
@@ -536987,6 +537029,12 @@
       "status": "allocated",
       "allocated": "20170220"
     },
+    "136390": {
+      "registry": "apnic",
+      "country": "VN",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
     "136391": {
       "registry": "apnic",
       "country": "AU",
@@ -548741,6 +548789,12 @@
       "status": "allocated",
       "allocated": "20181030"
     },
+    "138389": {
+      "registry": "apnic",
+      "country": "ID",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
     "138390": {
       "registry": "apnic",
       "country": "AU",
@@ -555832,6 +555886,12 @@
       "country": "AU",
       "status": "allocated",
       "allocated": "20190815"
+    },
+    "139593": {
+      "registry": "apnic",
+      "country": "BD",
+      "status": "allocated",
+      "allocated": "20220501"
     },
     "139594": {
       "registry": "apnic",
@@ -612131,11 +612191,23 @@
       "status": "allocated",
       "allocated": "20211129"
     },
+    "149044": {
+      "registry": "apnic",
+      "country": "VN",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
     "149045": {
       "registry": "apnic",
       "country": "HK",
       "status": "allocated",
       "allocated": "20211129"
+    },
+    "149046": {
+      "registry": "apnic",
+      "country": "VN",
+      "status": "allocated",
+      "allocated": "20260909"
     },
     "149048": {
       "registry": "apnic",
@@ -618748,6 +618820,12 @@
       "country": "MM",
       "status": "allocated",
       "allocated": "20220809"
+    },
+    "150160": {
+      "registry": "apnic",
+      "country": "TW",
+      "status": "allocated",
+      "allocated": "20260907"
     },
     "150161": {
       "registry": "apnic",
@@ -640283,6 +640361,12 @@
       "status": "allocated",
       "allocated": "20250417"
     },
+    "153800": {
+      "registry": "apnic",
+      "country": "BD",
+      "status": "allocated",
+      "allocated": "20250417"
+    },
     "153801": {
       "registry": "apnic",
       "country": "ID",
@@ -646720,6 +646804,174 @@
       "country": "TW",
       "status": "allocated",
       "allocated": "20260904"
+    },
+    "154883": {
+      "registry": "apnic",
+      "country": "TW",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
+    "154884": {
+      "registry": "apnic",
+      "country": "ID",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
+    "154885": {
+      "registry": "apnic",
+      "country": "TW",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
+    "154886": {
+      "registry": "apnic",
+      "country": "ID",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "154887": {
+      "registry": "apnic",
+      "country": "BD",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
+    "154888": {
+      "registry": "apnic",
+      "country": "ID",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
+    "154889": {
+      "registry": "apnic",
+      "country": "ID",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
+    "154890": {
+      "registry": "apnic",
+      "country": "BD",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
+    "154891": {
+      "registry": "apnic",
+      "country": "PK",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "154892": {
+      "registry": "apnic",
+      "country": "ID",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
+    "154893": {
+      "registry": "apnic",
+      "country": "IN",
+      "status": "allocated",
+      "allocated": "20260907"
+    },
+    "154894": {
+      "registry": "apnic",
+      "country": "ID",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "154895": {
+      "registry": "apnic",
+      "country": "ID",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "154896": {
+      "registry": "apnic",
+      "country": "ID",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "154897": {
+      "registry": "apnic",
+      "country": "ID",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "154898": {
+      "registry": "apnic",
+      "country": "ID",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "154899": {
+      "registry": "apnic",
+      "country": "ID",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "154900": {
+      "registry": "apnic",
+      "country": "BD",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "154901": {
+      "registry": "apnic",
+      "country": "ID",
+      "status": "allocated",
+      "allocated": "20260909"
+    },
+    "154902": {
+      "registry": "apnic",
+      "country": "TW",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "154903": {
+      "registry": "apnic",
+      "country": "BD",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "154904": {
+      "registry": "apnic",
+      "country": "PH",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "154905": {
+      "registry": "apnic",
+      "country": "ID",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "154906": {
+      "registry": "apnic",
+      "country": "IN",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "154907": {
+      "registry": "apnic",
+      "country": "IN",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "154908": {
+      "registry": "apnic",
+      "country": "IN",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "154909": {
+      "registry": "apnic",
+      "country": "IN",
+      "status": "allocated",
+      "allocated": "20260910"
+    },
+    "154910": {
+      "registry": "apnic",
+      "country": "IN",
+      "status": "allocated",
+      "allocated": "20260910"
     },
     "199073": {
       "registry": "apnic",
@@ -693017,12 +693269,6 @@
       "status": "allocated",
       "allocated": "20181106"
     },
-    "267941": {
-      "registry": "lacnic",
-      "country": "BR",
-      "status": "allocated",
-      "allocated": "20181106"
-    },
     "267942": {
       "registry": "lacnic",
       "country": "BR",
@@ -731333,6 +731579,18 @@
       "status": "allocated",
       "allocated": "20260903"
     },
+    "275036": {
+      "registry": "lacnic",
+      "country": "AR",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
+    "275037": {
+      "registry": "lacnic",
+      "country": "CO",
+      "status": "allocated",
+      "allocated": "20260908"
+    },
     "275293": {
       "registry": "lacnic",
       "country": "BR",
@@ -734395,9 +734653,9 @@
     },
     "36887": {
       "registry": "afrinic",
-      "country": "ZZ",
-      "status": "reserved",
-      "allocated": ""
+      "country": "NG",
+      "status": "allocated",
+      "allocated": "20060116"
     },
     "36888": {
       "registry": "afrinic",
@@ -734539,9 +734797,9 @@
     },
     "36911": {
       "registry": "afrinic",
-      "country": "ZZ",
-      "status": "reserved",
-      "allocated": ""
+      "country": "NG",
+      "status": "allocated",
+      "allocated": "20060804"
     },
     "36912": {
       "registry": "afrinic",
@@ -734599,9 +734857,9 @@
     },
     "36921": {
       "registry": "afrinic",
-      "country": "ZZ",
-      "status": "reserved",
-      "allocated": ""
+      "country": "NG",
+      "status": "allocated",
+      "allocated": "20061107"
     },
     "36922": {
       "registry": "afrinic",
@@ -753157,21 +753415,21 @@
     },
     "329806": {
       "registry": "afrinic",
-      "country": "ZZ",
-      "status": "available",
-      "allocated": ""
+      "country": "KE",
+      "status": "allocated",
+      "allocated": "20260907"
     },
     "329807": {
       "registry": "afrinic",
-      "country": "ZZ",
-      "status": "available",
-      "allocated": ""
+      "country": "TN",
+      "status": "allocated",
+      "allocated": "20260907"
     },
     "329808": {
       "registry": "afrinic",
-      "country": "ZZ",
-      "status": "available",
-      "allocated": ""
+      "country": "KE",
+      "status": "allocated",
+      "allocated": "20260908"
     },
     "329809": {
       "registry": "afrinic",

@@ -1,3 +1,10 @@
+import sys
+from pathlib import Path
+
+_PROBE = Path(__file__).resolve().parents[1] / "probe"
+if str(_PROBE) not in sys.path:
+    sys.path.insert(0, str(_PROBE))
+
 from plugins.base_plugin import Finding
 from scanner.analysis.attack_chain_engine import build_attack_chains
 from scanner.analysis.findings import group_findings
@@ -128,3 +135,19 @@ def test_attack_chains_reference_grouped_findings():
         "https://example.test/a",
         "https://example.test/z",
     ]
+
+
+def test_report_records_which_checks_ran():
+    class _Plugin:
+        def __init__(self, name):
+            self.name = name
+
+        def get_name(self):
+            return self.name
+
+    engine = ScanEngine(ScanConfig("https://example.test"))
+    engine.plugins = [_Plugin("security_headers"), _Plugin("web_vulnerabilities")]
+
+    report = engine._generate_report(1.0, [])
+
+    assert report["statistics"]["checks_performed"] == ["security_headers", "web_vulnerabilities"]

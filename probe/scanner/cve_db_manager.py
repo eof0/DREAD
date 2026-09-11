@@ -109,6 +109,11 @@ def _nvd_inter_request_sleep(api_key: Optional[str]) -> float:
     return NVD_SLEEP_WITH_KEY if api_key else NVD_SLEEP_NO_KEY
 
 
+def _nvd_rejected_key(response: requests.Response) -> bool:
+    """NVD answers a bad or unactivated key with 404 plus a `message: Invalid apiKey.` header."""
+    return response.status_code == 404 and "apikey" in response.headers.get("message", "").lower()
+
+
 def _nvd_get(
     params: Dict[str, Any],
     headers: Dict[str, str],
@@ -125,11 +130,13 @@ def _nvd_get(
         last = response
         if response.status_code == 200:
             return response
-        if response.status_code not in NVD_RETRY_HTTP:
+        if response.status_code not in NVD_RETRY_HTTP or _nvd_rejected_key(response):
             return response
         wait = (NVD_SLEEP_WITH_KEY if headers.get("apiKey") else NVD_SLEEP_NO_KEY) * attempt
+        nvd_message = response.headers.get("message")
         print(
-            f"  [!] NVD HTTP {response.status_code} "
+            f"  [!] NVD HTTP {response.status_code}"
+            f"{f' ({nvd_message})' if nvd_message else ''} "
             f"(attempt {attempt}/{NVD_MAX_RETRIES}); retrying in {wait:.0f}s..."
         )
         if verbose:
@@ -838,7 +845,18 @@ def _update_cve_database_unlocked(
             request_time = time.time() - request_start
             print(f"({request_time:.1f}s)")
             if response.status_code != 200:
-                print(f"[!] NVD API request failed: HTTP {response.status_code}")
+                nvd_message = response.headers.get("message")
+                print(
+                    f"[!] NVD API request failed: HTTP {response.status_code}"
+                    f"{f' - {nvd_message}' if nvd_message else ''}"
+                )
+                if _nvd_rejected_key(response):
+                    print(
+                        "[!] NVD rejected NVD_API_KEY. Make sure the key is activated "
+                        "(link in NVD's email) and that an old exported NVD_API_KEY "
+                        "isn't overriding the one in .env."
+                    )
+                    raise RuntimeError(f"NVD rejected NVD_API_KEY: {nvd_message}")
                 print(f"[!] URL: {response.url}")
                 print(f"[!] Response: {response.text}")
                 raise RuntimeError(

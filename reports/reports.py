@@ -87,7 +87,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     include = frozenset(inc_set)
 
     name = args.name.strip() or "dread_suite_report"
-    title = args.title.strip() or "DREAD Unified Security Report"
+    title = args.title.strip()
 
     dashboard_src = (_ROOT / "dashboard").resolve()
 
@@ -154,8 +154,8 @@ def main() -> int:
     )
     b.add_argument(
         "--title",
-        default="DREAD Unified Security Report",
-        help="Report title shown in PDF/dashboard",
+        default="",
+        help='Report title (default: "Recon/Vuln Analysis - Report Findings - <date>")',
     )
     b.add_argument(
         "--try-npm",

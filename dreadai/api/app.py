@@ -14,6 +14,12 @@ Endpoints:
     POST /api/dreadai/verify
     POST /api/dreadai/rule-out
     POST /api/dreadai/report
+    POST /api/dreadai/discover
+    POST /api/dreadai/triage
+    POST /api/dreadai/assess
+    POST /api/dreadai/reports
+    GET  /api/dreadai/external-tools
+    POST /api/dreadai/run-tool
     POST /api/dreadai/chat
 """
 from __future__ import annotations
@@ -71,6 +77,45 @@ def generate_report():
     return jsonify(agent.generate_report.invoke(
         {"target": body.get("target", ""), "findings": body.get("findings", [])}
     ))
+
+
+@app.route("/api/dreadai/discover", methods=["POST"])
+def discover_attack_surface():
+    return jsonify(agent.discover_attack_surface.invoke({"domain": _json_body().get("domain", "")}))
+
+
+@app.route("/api/dreadai/triage", methods=["POST"])
+def triage_cves():
+    return jsonify(agent.triage_cves.invoke({"text": _json_body().get("text", "")}))
+
+
+@app.route("/api/dreadai/assess", methods=["POST"])
+def assess_internal_network():
+    return jsonify(agent.assess_internal_network.invoke({"cidr": _json_body().get("cidr", "")}))
+
+
+@app.route("/api/dreadai/reports", methods=["POST"])
+def build_suite_reports():
+    body = _json_body()
+    return jsonify(agent.build_suite_reports.invoke({
+        "output_dir": body.get("output_dir", ""),
+        "probe_report_paths": body.get("probe_report_paths", []),
+        "scope_report_path": body.get("scope_report_path"),
+    }))
+
+
+@app.route("/api/dreadai/external-tools", methods=["GET"])
+def list_external_tools():
+    return jsonify(agent.list_external_tools.invoke({}))
+
+
+@app.route("/api/dreadai/run-tool", methods=["POST"])
+def run_external_tool():
+    body = _json_body()
+    return jsonify(agent.run_external_tool.invoke({
+        "tool_name": body.get("tool_name", ""), "target": body.get("target", ""),
+        "heavy": bool(body.get("heavy", False)),
+    }))
 
 
 @app.route("/api/dreadai/chat", methods=["POST"])

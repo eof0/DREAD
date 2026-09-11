@@ -9,8 +9,17 @@ from pathlib import Path
 from typing import Any
 
 
+DEFAULT_TITLE_PREFIX = "Recon/Vuln Analysis - Report Findings"
+
+
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _report_date(generated_at: str) -> str:
+    """Cover-page date ("September 11, 2026") in the generating machine's local time."""
+    dt = datetime.fromisoformat(generated_at).astimezone()
+    return f"{dt:%B} {dt.day}, {dt.year}"
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -34,6 +43,25 @@ def ingest_scope(path: Path | None) -> dict[str, Any] | None:
     return _load_json(path)
 
 
+VULNERABILITY_SEVERITIES = ("critical", "high", "medium", "low")
+_RISK_ORDER = ("none", "info", "low", "medium", "high", "critical")
+
+
+def _classify(finding: dict[str, Any]) -> str:
+    """
+    Same rule as probe's engine._generate_report: edge infrastructure, "warning"
+    class and info-severity findings are observations (reported, never counted as
+    vulnerabilities); everything else is a vulnerability.
+    """
+    if finding.get("edge_infrastructure"):
+        return "observation"
+    if (finding.get("metadata") or {}).get("classification") == "warning":
+        return "observation"
+    if str(finding.get("severity", "info")).lower() == "info":
+        return "observation"
+    return "vulnerability"
+
+
 def _normalize_probe_finding(
     scan_id: str,
     idx: int,
@@ -47,12 +75,30 @@ def _normalize_probe_finding(
         "source_artifact": source_label,
         "source_scan_id": scan_id,
         "severity": sev,
+        "classification": _classify(finding),
         "title": finding.get("title", ""),
         "url": finding.get("url", ""),
         "plugin_name": finding.get("plugin_name", ""),
         "description": finding.get("description", "")[:2000],
+        "remediation": finding.get("remediation", ""),
+        "evidence": finding.get("evidence") or {},
+        "affected_endpoints": finding.get("affected_endpoints") or [],
+        "attack_scenario": finding.get("attack_scenario", ""),
+        "defense_strategy": finding.get("defense_strategy", ""),
+        "mitigation_plan": finding.get("mitigation_plan", ""),
         "risk_score": finding.get("risk_score"),
+        "adjusted_risk_score": finding.get("adjusted_risk_score"),
     }
+
+
+def _overall_risk(scans: list[dict[str, Any]]) -> str:
+    """Worst per-scan risk level as computed by probe; never recomputed here."""
+    levels = [
+        str(((s.get("statistics") or {}).get("risk") or {}).get("level", "none")).lower()
+        for s in scans
+    ]
+    ranked = [lvl for lvl in levels if lvl in _RISK_ORDER]
+    return max(ranked, key=_RISK_ORDER.index, default="none")
 
 
 def build_unified_report(
@@ -83,6 +129,10 @@ def build_unified_report(
         "scope": {"included": bool(include_scope and scope_report), "summary": None},
     }
 
+    # Overlapping scans (e.g. two names for the same host) return the same finding
+    # more than once; the customer should see each issue exactly once.
+    seen_findings: set[tuple[str, str, str, str]] = set()
+
     if include_probe:
         for label, rep in probe_reports:
             scan_id = str(rep.get("scan_id", "unknown"))
@@ -101,6 +151,10 @@ def build_unified_report(
                 if not isinstance(f, dict):
                     continue
                 nf = _normalize_probe_finding(scan_id, i, f, label)
+                key = (nf["severity"], nf["plugin_name"], nf["title"], nf["url"])
+                if key in seen_findings:
+                    continue
+                seen_findings.add(key)
                 findings.append(nf)
                 sev = nf["severity"]
                 if sev in findings_by_severity:
@@ -114,25 +168,79 @@ def build_unified_report(
         disc = scope_report.get("discovery") or {}
         sub = disc.get("subdomains") or {}
         cloud = disc.get("cloud_assets") or {}
+        takeovers = disc.get("subdomain_takeover") or []
         sources["scope"]["summary"] = {
             "domain": scope_report.get("domain"),
             "subdomain_count": len(sub.get("all_unique") or []),
             "cloud_bucket_counts": {
                 k: len(v) for k, v in cloud.items() if isinstance(v, list)
             },
+            "subdomain_takeover_count": len(takeovers),
         }
+        # A dangling-CNAME takeover is a real, high-impact vulnerability; promote each
+        # into the findings register so it counts and appears in both reports.
+        for i, t in enumerate(takeovers):
+            if not isinstance(t, dict):
+                continue
+            sev = str(t.get("severity", "high")).lower()
+            findings.append({
+                "id": f"scope:takeover:{i}",
+                "source_product": "scope",
+                "source_artifact": "scope",
+                "source_scan_id": "scope",
+                "severity": sev,
+                "classification": "vulnerability",
+                "title": f"Subdomain takeover: {t.get('subdomain', '')}",
+                "url": t.get("subdomain", ""),
+                "plugin_name": "subdomain_takeover",
+                "description": t.get("detail", "")[:2000],
+                "remediation": (
+                    "Remove the dangling DNS record or reclaim the target resource at "
+                    f"{t.get('service', 'the provider')} before an attacker registers it."
+                ),
+                "evidence": {"cname": t.get("cname", ""), "service": t.get("service", "")},
+                "affected_endpoints": [t.get("subdomain", "")],
+                "attack_scenario": "", "defense_strategy": "", "mitigation_plan": "",
+                "risk_score": None, "adjusted_risk_score": None,
+            })
+            if sev in findings_by_severity:
+                findings_by_severity[sev] += 1
+            findings_by_plugin["subdomain_takeover"] = findings_by_plugin.get("subdomain_takeover", 0) + 1
+
+    vulnerabilities = [f for f in findings if f["classification"] == "vulnerability"]
+    checks_performed = list(
+        dict.fromkeys(
+            check
+            for _, rep in (probe_reports if include_probe else [])
+            for check in (rep.get("statistics") or {}).get("checks_performed") or []
+        )
+    )
+    generated_at = _utc_now_iso()
+    target = next(
+        (s["target"] for s in sources["probe"]["scans"] if s["target"]),
+        (sources["scope"]["summary"] or {}).get("domain") or "",
+    )
 
     return {
         "reports_schema_version": reports_schema_version,
         "suite": "DREAD",
         "report_type": "unified_suite",
-        "title": title,
+        "title": title or f"{DEFAULT_TITLE_PREFIX} - {_report_date(generated_at)}",
+        "target": target,
+        "checks_performed": checks_performed,
         "run_id": run_id,
-        "generated_at": _utc_now_iso(),
+        "generated_at": generated_at,
         "sources": sources,
         "rollups": {
             "total_findings": len(findings),
             "findings_by_severity": findings_by_severity,
+            "vulnerability_count": len(vulnerabilities),
+            "observation_count": len(findings) - len(vulnerabilities),
+            "vulnerabilities_by_severity": {
+                sev: sum(1 for f in vulnerabilities if f["severity"] == sev)
+                for sev in VULNERABILITY_SEVERITIES
+            },
+            "overall_risk": _overall_risk(sources["probe"]["scans"]),
             "findings_by_plugin": dict(
                 sorted(findings_by_plugin.items(), key=lambda kv: -kv[1])
             ),

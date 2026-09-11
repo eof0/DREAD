@@ -25,24 +25,38 @@ from products import SUITE_VERSION, format_suite_overview  # noqa: E402
 
 def cmd_info(_: argparse.Namespace) -> int:
     print(
-        """DreadAI — verification today; broader orchestration on the roadmap
+        """DreadAI — the security orchestration agent for the DREAD suite.
 
-Implemented:
-  • verify   Structural checks on Probe scan JSON or Reports unified suite JSON
-  • suite    Same overview as `dread products`
-  • version  Suite version string
+A LangGraph agent (LangChain + Anthropic, optional LangSmith tracing) that drives
+the whole suite from natural language. Talk to it in the chat window; it discovers,
+scans, confirms, triages, and reports — asking before it installs anything.
 
-Roadmap (suite-wide):
-  • Monitor orchestration across Probe, Scope, Watch, Graph,
-    Intel, Reports, Spear, and Cannon
-  • Policy hooks and gap-oriented probes; third-party scanner integration
-  • Deeper cross-checks feeding Reports accuracy
+Agent tools:
+  Discovery   discover_attack_surface   Scope: subdomains, takeovers, cloud assets
+  Web scan    scan_target               Probe: crawl + active vulnerability checks
+  Internal    assess_internal_network   Spear: host/service discovery + risk (read-only)
+  Confirm     verify_vulnerability / rule_out_false_positive
+  Intel       fetch_cve / triage_cves   local CVE store + KEV/EPSS/CVSS triage
+  Report      generate_report / build_suite_reports  executive + technical deliverables
+  Pentest     run_pentest               drive Cannon's cataloged tools
+  External    list_external_tools / run_external_tool / install_external_tool
+              drive real tools (nmap, nikto, ...) and install missing ones on consent
 
 Subcommands:
-  info       This text
-  version    Suite version
-  suite      Print full product suite overview (same as `dread products`)
-  verify     Sanity-check Probe or Reports (unified suite) JSON
+  chat [prompt]  Talk to DreadAI — interactive TUI, or one-shot with a prompt
+  verify <json>  Sanity-check Probe scan JSON or Reports unified suite JSON
+  suite          Full product suite overview (same as `dread products`)
+  info | version This text / suite version
+
+Environment:
+  ANTHROPIC_API_KEY        required for the agent (chat)
+  DREADAI_MODEL            model id (default claude-sonnet-5)
+  LANGSMITH_API_KEY        enable LangSmith tracing (optional)
+  DREADAI_ALLOW_INSTALL=1  let DreadAI install missing external tools (or /allow-install in chat)
+
+Authorized targets only. Internal assessment targets private ranges. DreadAI has
+no ability to poison name resolution or capture credentials — those live behind a
+separate human authorization gate.
 """
     )
     return 0
@@ -197,11 +211,16 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
 
 def cmd_chat(args: argparse.Namespace) -> int:
-    """Drive the suite through the DreadAI agent from a single prompt."""
+    """Talk to the DreadAI agent: interactive TUI with no prompt, one-shot with one."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+    if not args.prompt:
+        from chat import run_repl
+        return run_repl()
+
     if not os.environ.get("ANTHROPIC_API_KEY"):
         print("[!] ANTHROPIC_API_KEY is not set.", file=sys.stderr)
         return 2
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
     from agent import ask
 
     print(ask(args.prompt))
@@ -240,8 +259,12 @@ def main() -> int:
     )
     p_verify.set_defaults(func=cmd_verify)
 
-    p_chat = sub.add_parser("chat", help="Ask the DreadAI agent to scan, correlate, and report")
-    p_chat.add_argument("prompt", help="What you want DreadAI to do")
+    p_chat = sub.add_parser(
+        "chat",
+        help="Talk to the DreadAI agent (interactive TUI, or one-shot with a prompt)",
+    )
+    p_chat.add_argument("prompt", nargs="?", default=None,
+                        help="One-shot request; omit to open the interactive chat window")
     p_chat.set_defaults(func=cmd_chat)
 
     args = parser.parse_args()

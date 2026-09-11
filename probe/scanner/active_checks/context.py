@@ -23,6 +23,8 @@ class ActiveScanContext:
         baseline_sql: set[str] | None = None,
         origin_budget: int = 240,
         origin_state: OriginState | None = None,
+        method: str = "GET",
+        location: str = "query",
     ):
         self.endpoint = endpoint
         self.origin = origin
@@ -30,6 +32,11 @@ class ActiveScanContext:
         self.params = params
         self.baseline_sql = baseline_sql or set()
         self._request = request
+        # How a mutated payload is delivered: GET query string ("query"), POST form
+        # body ("form"), or POST JSON body ("json"). The active checks are unchanged;
+        # only the transport differs, so one check covers GET and POST alike.
+        self.method = (method or "GET").upper()
+        self.location = location
         self._endpoint_budget = endpoint_budget
         self._endpoint_requests = 0
         self._origin_state = origin_state or OriginState(origin_budget)
@@ -61,10 +68,14 @@ class ActiveScanContext:
             self._endpoint_requests += 1
             self._origin_state.requests += 1
 
+        payload_kwarg = {"query": "params", "form": "data", "json": "json"}.get(
+            self.location, "params"
+        )
         return self._request(
+            method=self.method,
             url=self.endpoint,
-            params=params,
             allow_redirects=False,
+            **{payload_kwarg: params},
         )
 
     def usage(self) -> dict[str, int]:

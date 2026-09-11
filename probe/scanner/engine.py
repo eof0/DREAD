@@ -251,7 +251,8 @@ class ScanEngine:
             config.target_url,
             config.depth,
             config.max_urls,
-            verbose=self.verbose
+            verbose=self.verbose,
+            render_js=getattr(config, "render_js", False),
         )
         self.plugins = []
         self.findings = []
@@ -272,6 +273,10 @@ class ScanEngine:
             "network_scanner": "plugins.network_scanner.NetworkScannerPlugin",
             "tls_analysis": "plugins.tls_analysis.TLSAnalysisPlugin",
             "infrastructure": "plugins.infrastructure_intel.InfrastructureIntelPlugin",
+            "api_discovery": "plugins.api_discovery.APIDiscoveryPlugin",
+            "waf_detection": "plugins.waf_detection.WAFDetectionPlugin",
+            "cors_check": "plugins.cors_check.CORSCheckPlugin",
+            "misconfiguration": "plugins.misconfiguration.MisconfigurationPlugin",
         }
 
         for plugin_name in self.config.enabled_plugins:
@@ -443,9 +448,12 @@ class ScanEngine:
             raise RuntimeError("Report generation produced no artifacts")
 
         self._print_summary(report)
-        self.console.success("Artifacts written:")
-        for artifact in artifacts:
-            self.console.print(f"  - {artifact}", style="green")
+        # Under `dread scan` these land in a temp dir that is merged into the suite
+        # report and then deleted; dread prints the real report paths instead.
+        if os.environ.get("DREAD_STAGED_OUTPUT", "").strip() != "1":
+            self.console.success("Artifacts written:")
+            for artifact in artifacts:
+                self.console.print(f"  - {artifact}", style="green")
 
         return report
 
@@ -525,6 +533,8 @@ class ScanEngine:
                 "informational_findings": len(info_findings),
                 "edge_infrastructure_findings": len(edge_findings),
                 "total_findings_with_edge": len(all_findings),
+                # Lets reports state their methodology without claiming checks that never ran.
+                "checks_performed": [plugin.get_name() for plugin in self.plugins],
                 "overall_risk_score": round(normalized_risk, 2),
                 "risk": {
                     "level": risk_level,
