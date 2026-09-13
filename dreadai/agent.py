@@ -37,8 +37,8 @@ MODEL = os.environ.get("DREADAI_MODEL", "claude-sonnet-5")  # back-compat alias
 # model (OpenAI/GPT, Google Gemini, Groq, OpenRouter, DeepSeek, Together, xAI, ...).
 _DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-5",
-    "ollama": "qwen2.5-coder:7b",
-    "local": "qwen2.5-coder:7b",
+    "ollama": "qwen2.5:7b-instruct",
+    "local": "qwen2.5:7b-instruct",
     "openai": "gpt-4o-mini",
     "openrouter": "openai/gpt-4o-mini",
     "groq": "llama-3.3-70b-versatile",
@@ -86,6 +86,24 @@ def _local_base_url() -> str:
             or "http://localhost:11434")
 
 
+def active_provider() -> str:
+    """The resolved provider key for DREADAI_PROVIDER (aliases collapsed, default 'anthropic')."""
+    provider = os.environ.get("DREADAI_PROVIDER", "anthropic").strip().lower()
+    return _ALIASES.get(provider, provider)
+
+
+def needs_anthropic_credential() -> bool:
+    """True only when the active provider is Claude and no key/login token is set.
+
+    Every other provider (a local Qwen via Ollama included) needs neither an
+    ANTHROPIC_API_KEY nor a login — callers must not gate on this key unconditionally.
+    """
+    if active_provider() != "anthropic":
+        return False
+    return not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+                or os.environ.get("DREADAI_ANTHROPIC_AUTH_TOKEN"))
+
+
 def build_model():
     """
     Construct the chat model for the configured provider.
@@ -110,7 +128,7 @@ def build_model():
     if provider == "google":
         return _build_google(model or "gemini-1.5-flash")
     if provider == "ollama":
-        return _build_ollama(model or "qwen2.5-coder:7b")
+        return _build_ollama(model or "qwen2.5:7b-instruct")
     if provider == "local":
         return _build_openai_compatible(
             "local", model, default_base=_local_base_url().rstrip("/") + "/v1",
@@ -179,8 +197,16 @@ def _build_google(model: str):
 
 
 def _build_ollama(model: str):
-    """Prefer the native Ollama client (best tool-calling for Qwen); fall back to any
-    OpenAI-compatible client against Ollama's /v1 endpoint."""
+    """Prefer the native Ollama client (best tool-calling support); fall back to any
+    OpenAI-compatible client against Ollama's /v1 endpoint.
+
+    Model choice matters here: qwen2.5-coder's chat template asks the model to wrap
+    tool calls in <tool_call> tags, but the coder-tuned weights frequently emit bare
+    JSON instead — Ollama's parser then never recognizes it as a tool call, so it
+    surfaces as inert text and the ReAct loop silently never invokes anything. The
+    plain instruct-tuned qwen2.5:7b-instruct follows the wrapper reliably, so that's
+    the default local model despite "coder" sounding like the better fit for DreadAI.
+    """
     base_url = _local_base_url().rstrip("/")
     try:
         ChatOllama = _load_chat_class("langchain_ollama:ChatOllama")
@@ -205,7 +231,7 @@ def _build_openai_compatible(provider: str, model, default_base: str = None,
         raise RuntimeError(
             "DreadAI's OpenAI-compatible provider needs 'langchain-openai' "
             "(pip install langchain-openai). For a local model, also install "
-            "'langchain-ollama' and run Ollama (ollama pull qwen2.5-coder:7b)."
+            "'langchain-ollama' and run Ollama (ollama pull qwen2.5:7b-instruct)."
         ) from exc
     # Local endpoints ignore the key; cloud ones read DREADAI_API_KEY / OPENAI_API_KEY.
     api_key = (os.environ.get("DREADAI_API_KEY")

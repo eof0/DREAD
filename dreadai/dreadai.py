@@ -49,8 +49,9 @@ Subcommands:
   info | version This text / suite version
 
 Environment:
-  ANTHROPIC_API_KEY        required for the agent (chat)
-  DREADAI_MODEL            model id (default claude-sonnet-5)
+  DREADAI_PROVIDER         anthropic (default), ollama/qwen (local, no key/login), openai, google, ...
+  ANTHROPIC_API_KEY        Claude only — a login/ANTHROPIC_AUTH_TOKEN works instead
+  DREADAI_MODEL            model id override (default depends on DREADAI_PROVIDER)
   LANGSMITH_API_KEY        enable LangSmith tracing (optional)
   DREADAI_ALLOW_INSTALL=1  let DreadAI install missing external tools (or /allow-install in chat)
 
@@ -218,10 +219,13 @@ def cmd_chat(args: argparse.Namespace) -> int:
         from chat import run_repl
         return run_repl()
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("[!] ANTHROPIC_API_KEY is not set.", file=sys.stderr)
+    from agent import ask, needs_anthropic_credential
+
+    if needs_anthropic_credential():
+        print("[!] No Claude credential found (ANTHROPIC_API_KEY or a login/ANTHROPIC_AUTH_TOKEN).",
+              file=sys.stderr)
+        print("    Set one, or set DREADAI_PROVIDER=qwen for a fully local model.", file=sys.stderr)
         return 2
-    from agent import ask
 
     print(ask(args.prompt))
     return 0

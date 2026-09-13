@@ -124,8 +124,10 @@ def chat():
     prompt = data.get("prompt", "")
     if not prompt:
         return jsonify({"error": "Missing 'prompt' in request body."}), 400
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        return jsonify({"error": "ANTHROPIC_API_KEY is not set."}), 503
+    if agent.needs_anthropic_credential():
+        return jsonify({"error": "No Claude credential found (ANTHROPIC_API_KEY or a login/"
+                                  "ANTHROPIC_AUTH_TOKEN). Set DREADAI_PROVIDER=qwen for a "
+                                  "fully local model instead."}), 503
     return jsonify({"result": agent.ask(prompt)})
 
 

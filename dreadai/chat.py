@@ -33,6 +33,8 @@ _BANNER = r"""
 
 _HELP = """Commands:
   /help              show this help
+  /models            list available models/providers
+  /models <name>     switch model (e.g. "qwen" for local/offline, "claude", "gpt", "gemini")
   /tools             list the tools DreadAI can use
   /allow-install on  allow DreadAI to install missing external tools this session
   /allow-install off revoke install permission
@@ -41,6 +43,20 @@ _HELP = """Commands:
 
 Type anything else to talk to DreadAI. It will discover, scan, confirm, triage,
 and report — asking before it installs anything. Authorized targets only."""
+
+# key -> (label, needs a credential?). Keys match agent._DEFAULT_MODELS providers,
+# plus the aliases people actually type (agent._ALIASES resolves those to a key here).
+_MODEL_LABELS = {
+    "ollama": "local, via Ollama — no API key, no login",
+    "anthropic": "Claude — API key or a login/ANTHROPIC_AUTH_TOKEN",
+    "openai": "OpenAI/GPT — API key",
+    "google": "Google Gemini — API key",
+    "groq": "Groq — API key",
+    "openrouter": "OpenRouter — API key",
+    "deepseek": "DeepSeek — API key",
+    "together": "Together AI — API key",
+    "xai": "xAI/Grok — API key",
+}
 
 
 def parse_command(line: str) -> Optional[tuple[str, str]]:
@@ -92,6 +108,43 @@ class ChatSession:
         self.history = []
         self.turns = 0
 
+    def switch_model(self) -> None:
+        """Drop the cached agent so the next turn rebuilds it against the new
+        DREADAI_PROVIDER/DREADAI_MODEL — conversation history is kept."""
+        self._agent = None
+
+
+def _models_list_text() -> str:
+    from agent import _DEFAULT_MODELS, active_provider
+
+    current = active_provider()
+    lines = ["Models (/models <name> to switch — history carries over):"]
+    for key, default_model in _DEFAULT_MODELS.items():
+        marker = "*" if key == current else " "
+        label = _MODEL_LABELS.get(key, "")
+        lines.append(f"  {marker} {key:<11} {default_model:<28} {label}")
+    lines.append("\nAliases: qwen->ollama, claude->anthropic, gpt->openai, gemini->google, grok->xai")
+    return "\n".join(lines)
+
+
+def _switch_model_text(session: "ChatSession", arg: str) -> str:
+    from agent import _ALIASES, _DEFAULT_MODELS
+
+    choice = arg.strip().lower()
+    if not choice:
+        return _models_list_text()
+    provider = _ALIASES.get(choice, choice)
+    if provider not in _DEFAULT_MODELS:
+        return (f"Unknown model '{arg}'. Try one of: {', '.join(sorted(_DEFAULT_MODELS))} "
+                "(or an alias like qwen/claude/gpt/gemini/grok).")
+    os.environ["DREADAI_PROVIDER"] = provider
+    os.environ.pop("DREADAI_MODEL", None)  # fall back to that provider's default model
+    session.switch_model()
+    if provider in ("ollama", "local"):
+        return (f"Switched to {provider} ({_DEFAULT_MODELS[provider]}) — fully local, "
+                "no API key or login needed for either provider.")
+    return f"Switched to {provider} ({_DEFAULT_MODELS[provider]})."
+
 
 def _tool_list_text() -> str:
     try:
@@ -110,6 +163,8 @@ def handle_command(session: ChatSession, command: str, arg: str):
         return _HELP
     if command == "tools":
         return _tool_list_text()
+    if command == "models":
+        return _switch_model_text(session, arg)
     if command == "clear":
         session.clear()
         return "Conversation cleared."
@@ -122,16 +177,27 @@ def handle_command(session: ChatSession, command: str, arg: str):
     return f"Unknown command: /{command}  (try /help)"
 
 
-def run_repl() -> int:
-    """Interactive chat loop. Requires ANTHROPIC_API_KEY."""
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("[!] ANTHROPIC_API_KEY is not set.", file=sys.stderr)
-        return 2
+def _startup_warning() -> Optional[str]:
+    """Warn (don't block) when the *default* provider is Claude and no credential is
+    set — /models is still reachable to switch to a local/offline model like Qwen."""
+    from agent import needs_anthropic_credential
 
+    if not needs_anthropic_credential():
+        return None
+    return ("No Claude credential found (ANTHROPIC_API_KEY, or a login/ANTHROPIC_AUTH_TOKEN).\n"
+            "    Run /models qwen to use the local model instead, or set a credential.")
+
+
+def run_repl() -> int:
+    """Interactive chat loop. Defaults to Claude; run /models to switch — a local Qwen
+    (via Ollama) needs no API key and no login at all."""
     from agent import configure_tracing
     traced = configure_tracing()
 
     print(_BANNER)
+    warning = _startup_warning()
+    if warning:
+        print(f"\x1b[33m[!] {warning}\x1b[0m\n")
     if traced.get("enabled"):
         print(f"  LangSmith tracing on (project: {traced['project']}).\n")
 

@@ -90,3 +90,63 @@ def test_handle_help_and_tools_return_text():
 def test_exit_command_signals_quit():
     session = chat.ChatSession(agent_factory=lambda: FakeAgent([]))
     assert chat.handle_command(session, "exit", "") is chat.QUIT
+
+
+def test_models_with_no_arg_lists_providers(monkeypatch):
+    monkeypatch.delenv("DREADAI_PROVIDER", raising=False)
+    session = chat.ChatSession(agent_factory=lambda: FakeAgent([]))
+    out = chat.handle_command(session, "models", "")
+    assert "ollama" in out
+    assert "anthropic" in out
+
+
+def test_models_qwen_alias_switches_to_ollama_with_no_credential_note(monkeypatch):
+    monkeypatch.delenv("DREADAI_PROVIDER", raising=False)
+    monkeypatch.delenv("DREADAI_MODEL", raising=False)
+    session = chat.ChatSession(agent_factory=lambda: FakeAgent([]))
+
+    out = chat.handle_command(session, "models", "qwen")
+
+    assert os.environ["DREADAI_PROVIDER"] == "ollama"
+    assert "no api key" in out.lower() or "fully local" in out.lower()
+
+
+def test_models_switch_drops_cached_agent_so_it_rebuilds(monkeypatch):
+    monkeypatch.delenv("DREADAI_PROVIDER", raising=False)
+    session = chat.ChatSession(agent_factory=lambda: FakeAgent([("hi", [])]))
+    session.ask("hello")            # caches an agent instance
+    assert session._agent is not None
+
+    chat.handle_command(session, "models", "qwen")
+
+    assert session._agent is None   # next .ask() rebuilds via agent_factory
+
+
+def test_models_unknown_name_lists_valid_choices():
+    session = chat.ChatSession(agent_factory=lambda: FakeAgent([]))
+    out = chat.handle_command(session, "models", "not-a-real-provider")
+    assert "unknown" in out.lower()
+    assert "ollama" in out
+
+
+def test_startup_warning_none_when_provider_is_ollama(monkeypatch):
+    monkeypatch.setenv("DREADAI_PROVIDER", "ollama")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    assert chat._startup_warning() is None
+
+
+def test_startup_warning_fires_for_anthropic_without_credential(monkeypatch):
+    monkeypatch.delenv("DREADAI_PROVIDER", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    monkeypatch.delenv("DREADAI_ANTHROPIC_AUTH_TOKEN", raising=False)
+    warning = chat._startup_warning()
+    assert warning is not None
+    assert "/models qwen" in warning
+
+
+def test_startup_warning_none_when_anthropic_credential_present(monkeypatch):
+    monkeypatch.delenv("DREADAI_PROVIDER", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    assert chat._startup_warning() is None

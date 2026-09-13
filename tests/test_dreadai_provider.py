@@ -54,7 +54,7 @@ def test_ollama_provider_uses_qwen_and_local_endpoint(monkeypatch):
 
     agent.build_model()
     assert "ChatOllama" in made["dotted"]
-    assert made["model"] == "qwen2.5-coder:7b"          # sensible local default
+    assert made["model"] == "qwen2.5:7b-instruct"       # reliable tool-calling local default
     assert made["base_url"] == "http://localhost:11434"  # Ollama default
 
 
@@ -171,3 +171,24 @@ def test_anthropic_login_token_sends_bearer_not_api_key(monkeypatch):
     assert "X-Api-Key" not in headers
     # The OAuth beta header must ride along.
     assert model._client.default_headers.get("anthropic-beta") == "oauth-2025-04-20"
+
+
+def test_needs_anthropic_credential_true_by_default_with_no_creds():
+    assert agent.needs_anthropic_credential() is True
+
+
+def test_needs_anthropic_credential_false_with_api_key(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    assert agent.needs_anthropic_credential() is False
+
+
+def test_needs_anthropic_credential_false_with_login_token(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "oauth-abc")
+    assert agent.needs_anthropic_credential() is False
+
+
+def test_needs_anthropic_credential_false_for_other_providers(monkeypatch):
+    # No Claude credential at all, but the active provider isn't Claude -> not needed.
+    monkeypatch.setenv("DREADAI_PROVIDER", "qwen")
+    assert agent.needs_anthropic_credential() is False
+    assert agent.active_provider() == "ollama"
