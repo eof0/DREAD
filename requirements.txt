@@ -15,6 +15,11 @@ flask>=2.3.0
 langgraph>=0.2.0
 langchain-core>=0.3.0
 langchain-anthropic>=0.2.0
+# Optional model providers (DREADAI_PROVIDER selects one; installed only if used):
+#   local Qwen / Ollama .......... pip install langchain-ollama
+#   OpenAI/GPT + any OpenAI-compatible endpoint (OpenRouter, Groq, DeepSeek, Together,
+#     xAI, vLLM/LM Studio, ...) .. pip install langchain-openai
+#   Google Gemini ................ pip install langchain-google-genai
 
 # HTML parsing
 beautifulsoup4>=4.11.0

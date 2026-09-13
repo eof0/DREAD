@@ -37,7 +37,10 @@ class FingerprintingPlugin(BasePlugin):
         if verbose:
             print(f"[VERBOSE] [fingerprinting] Detected {len(tech)} technologies")
             for t in tech:
-                print(f"[VERBOSE] [fingerprinting]   - {t.get('name', 'unknown')}: {t.get('version', 'unknown')}")
+                if isinstance(t, dict):
+                    print(f"[VERBOSE] [fingerprinting]   - {t.get('name', 'unknown')}: {t.get('version', 'unknown')}")
+                else:
+                    print(f"[VERBOSE] [fingerprinting]   - {t}")
 
         if not tech:
             return findings

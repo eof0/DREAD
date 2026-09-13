@@ -20,6 +20,29 @@ from scanner.cve_db_manager import update_cve_database, update_kev_epss, get_sta
 from scanner.cve_db_bootstrap import update_with_snapshot_policy
 
 
+def _collect_proxies(proxy: str | None, proxy_file: str | None) -> list:
+    """Build the proxy rotation list from --proxy (comma-separated) and --proxy-file."""
+    proxies: list = []
+    if proxy:
+        proxies.extend(p.strip() for p in proxy.split(",") if p.strip())
+    if proxy_file:
+        try:
+            with open(proxy_file, "r", encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        proxies.append(line)
+        except OSError as exc:
+            print(f"[!] Could not read --proxy-file {proxy_file!r}: {exc}", file=sys.stderr)
+    # De-dupe while preserving order.
+    seen, unique = set(), []
+    for p in proxies:
+        if p not in seen:
+            seen.add(p)
+            unique.append(p)
+    return unique
+
+
 def _apply_auth_args(args, config_kwargs: dict) -> None:
     """Translate --auth-* / -H flags into ScanConfig auth kwargs."""
     bearer = getattr(args, "auth_bearer", None)
@@ -74,14 +97,17 @@ def cmd_scan(args) -> int:
         print(f"[!] Unsupported format(s): {', '.join(invalid)}", file=sys.stderr)
         return 1
 
+    offensive = bool(getattr(args, "offensive", False))
     config_kwargs = {
         "target_url": args.target,
         "output_name": args.output,
         "output_formats": formats or ["json", "md", "pdf"],
-        "profile": args.profile,
+        # Offensive mode defaults to the full profile for maximum coverage.
+        "profile": args.profile or ("full" if offensive else None),
         "verbose": getattr(args, "verbose", False),
+        "aggressive": offensive,
     }
-    
+
     if args.depth is not None:
         config_kwargs["depth"] = args.depth
     if args.max_urls is not None:
@@ -96,8 +122,15 @@ def cmd_scan(args) -> int:
         ]
     if getattr(args, "render_js", None):
         config_kwargs["render_js"] = True
+    if getattr(args, "ports", None):
+        config_kwargs["ports"] = args.ports.strip()
     if getattr(args, "output_dir", None):
         config_kwargs["output_dir"] = str(args.output_dir).strip()
+    proxies = _collect_proxies(getattr(args, "proxy", None), getattr(args, "proxy_file", None))
+    if proxies:
+        config_kwargs["proxies"] = proxies
+    if getattr(args, "password_spray", False):
+        config_kwargs["password_spray"] = True
 
     _apply_auth_args(args, config_kwargs)
 
@@ -209,6 +242,39 @@ Examples:
         default=None,
         help="Render pages in a headless browser to crawl JavaScript/SPA sites "
              "(needs Playwright + Chromium; on by default in the 'full' profile)",
+    )
+    scan_parser.add_argument(
+        "--offensive",
+        action="store_true",
+        help="Aggressive mode for targets you own/are authorized to hammer: drives the "
+             "browser like a user to reach the JS/SPA API, fuzzes far more, full profile. "
+             "Removes the default safety throttles.",
+    )
+    scan_parser.add_argument(
+        "--ports",
+        metavar="SPEC",
+        help="Restrict port scanning to this scope so a scan of one port doesn't wander "
+             "to 80/443/8080. Accepts a list or range, e.g. 3007, 80,443, or 1-1000.",
+    )
+    scan_parser.add_argument(
+        "--proxy",
+        metavar="URL",
+        help="Route all scan traffic through a proxy (optional). Accepts http(s)/socks5 "
+             "with optional user:pass@, e.g. http://127.0.0.1:8080 or "
+             "socks5://user:pass@host:1080. Comma-separated values rotate round-robin.",
+    )
+    scan_parser.add_argument(
+        "--proxy-file",
+        metavar="PATH",
+        help="File of proxy URLs (one per line, # comments allowed) to rotate through "
+             "round-robin. Combined with --proxy if both are given.",
+    )
+    scan_parser.add_argument(
+        "--password-spray",
+        action="store_true",
+        help="Opt-in: after the scan, spray a small list of default credentials at any "
+             "discovered login form (authorized targets only). Off by default; not a "
+             "dictionary attack.",
     )
     scan_parser.add_argument(
         "-v", "--verbose",

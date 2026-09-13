@@ -45,5 +45,13 @@
     "description": "HTTP load generator.",
     "argv": ["-n", "200", "-c", "10", "{target}"],
     "heavy": ["-n", "10000", "-c", "200", "{target}"]
+  },
+  {
+    "name": "42crunch",
+    "binary": "docker",
+    "category": "recon",
+    "description": "42Crunch API Security Audit: static SAST of OpenAPI definitions (OWASP API Top 10, schema/auth issues, 0-100 score). Runs the 42crunch/docker-api-security-audit image; {target} is the host directory holding the OpenAPI files (mounted at /workspace). Needs X42C_API_TOKEN plus X42C_REPOSITORY_URL and X42C_BRANCH_NAME set in the environment (passed through). X42C_MIN_SCORE tunes the pass threshold.",
+    "argv": ["run", "--rm", "-v", "{target}:/workspace", "-e", "X42C_API_TOKEN", "-e", "X42C_REPOSITORY_URL", "-e", "X42C_BRANCH_NAME", "-e", "X42C_MIN_SCORE", "-e", "X42C_PLATFORM_URL", "42crunch/docker-api-security-audit:v4"],
+    "packages": {"apt": "docker.io", "pacman": "docker", "dnf": "docker"}
   }
 ]

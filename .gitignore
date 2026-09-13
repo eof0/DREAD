@@ -51,9 +51,11 @@ build/
 node_modules/
 **/node_modules/
 
-# Go / tooling 
+# Go / tooling
 probe/scanner/engines/network/network_scanner
 probe/scanner/engines/network/*.exe
+probe/scanner/engines/http/http_fetch
+probe/scanner/engines/http/*.exe
 
 .DS_Store
 Thumbs.db

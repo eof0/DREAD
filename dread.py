@@ -139,6 +139,30 @@ def _dedupe_scan_targets(targets: list[str]) -> list[str]:
     return unique
 
 
+def _target_supports_discovery(target: str) -> bool:
+    """
+    Whether external attack-surface discovery (subdomain enumeration, cloud assets)
+    is meaningful for a target. It is NOT for localhost, IP literals, .local/.localhost
+    names, or single-label hosts — enumerating "subdomains of localhost" just wastes
+    time and pollutes the report with phantom hosts.
+    """
+    import ipaddress
+
+    host = _hostname_from_scan_target(target)
+    if not host:
+        return False
+    if host in ("localhost",) or host.endswith((".localhost", ".local")):
+        return False
+    stripped = host.strip("[]")
+    try:
+        ipaddress.ip_address(stripped)
+        return False  # bare IP address
+    except ValueError:
+        pass
+    # A registrable domain needs at least one dot (a label + a TLD).
+    return "." in host
+
+
 def _omit_redundant_www_when_user_chose_apex(primary: str, targets: list[str]) -> list[str]:
     """
     If the user targets the apex host (not www), omit www.<apex> from follow-on
@@ -233,6 +257,11 @@ def run_probe(
     depth: int | None = None,
     max_urls: int | None = None,
     render_js: bool = False,
+    offensive: bool = False,
+    ports: str | None = None,
+    proxy: str | None = None,
+    proxy_file: str | None = None,
+    password_spray: bool = False,
 ) -> subprocess.CompletedProcess:
     """Run Probe scan. When quiet is False, stdout/stderr stream live to the terminal.
 
@@ -253,6 +282,16 @@ def run_probe(
         cmd.extend(["--max-urls", str(max_urls)])
     if render_js:
         cmd.append("--render-js")
+    if offensive:
+        cmd.append("--offensive")
+    if ports:
+        cmd.extend(["--ports", str(ports)])
+    if proxy:
+        cmd.extend(["--proxy", str(proxy)])
+    if proxy_file:
+        cmd.extend(["--proxy-file", str(proxy_file)])
+    if password_spray:
+        cmd.append("--password-spray")
     if report_format:
         cmd.extend(["--format", report_format])
     if output_name:
@@ -466,18 +505,27 @@ def full_scan(target: str, args: argparse.Namespace) -> int:
         )
 
     # Phase 1: Discovery
-    if not quiet:
-        print("[Phase 1] Attack Surface Discovery (Scope)")
-        print("-" * 60)
-
     verbose = bool(getattr(args, "verbose", False))
 
-    discovery = run_scope(
-        target,
-        output_format="json",
-        verbose=verbose,
-        quiet=quiet,
-    )
+    # Skip external discovery for localhost/IP/single-host targets — there are no
+    # subdomains or cloud assets to find, and enumerating "subdomains of localhost"
+    # both wastes time and floods the report with 0-finding phantom hosts.
+    if _target_supports_discovery(target):
+        if not quiet:
+            print("[Phase 1] Attack Surface Discovery (Scope)")
+            print("-" * 60)
+        discovery = run_scope(
+            target,
+            output_format="json",
+            verbose=verbose,
+            quiet=quiet,
+        )
+    else:
+        if not quiet:
+            print("[Phase 1] Attack Surface Discovery — skipped "
+                  f"(local/IP target has no external surface): {target}")
+            print("-" * 60)
+        discovery = {}
 
     if run_dir and discovery:
         scope_file = run_dir / "scope_discovery.json"
@@ -554,6 +602,11 @@ def full_scan(target: str, args: argparse.Namespace) -> int:
             depth=getattr(args, "depth", None),
             max_urls=getattr(args, "max_urls", None),
             render_js=bool(getattr(args, "render_js", False)),
+            offensive=bool(getattr(args, "offensive", False)),
+            ports=getattr(args, "ports", None),
+            proxy=getattr(args, "proxy", None),
+            proxy_file=getattr(args, "proxy_file", None),
+            password_spray=bool(getattr(args, "password_spray", False)),
         )
         if proc.returncode != 0:
             failures += 1
@@ -791,6 +844,35 @@ def main() -> int:
         action="store_true",
         help="Render pages in a headless browser to crawl JavaScript/SPA sites "
              "(needs Playwright + Chromium; implied by --profile full)",
+    )
+    scan_parser.add_argument(
+        "--offensive",
+        action="store_true",
+        help="Aggressive mode for targets you own/are authorized to hammer: full "
+             "profile, browser-driven fetch/XHR fuzzing, far more probes, throttles off.",
+    )
+    scan_parser.add_argument(
+        "--ports",
+        metavar="SPEC",
+        help="Restrict port scanning to this scope (e.g. 3007, 80,443, 1-1000) so a "
+             "scan of one port does not wander to others.",
+    )
+    scan_parser.add_argument(
+        "--proxy",
+        metavar="URL",
+        help="Optional. Route scan traffic through a proxy (http(s)/socks5, optional "
+             "user:pass@). Comma-separated values rotate round-robin.",
+    )
+    scan_parser.add_argument(
+        "--proxy-file",
+        metavar="PATH",
+        help="Optional. File of proxy URLs (one per line) to rotate through.",
+    )
+    scan_parser.add_argument(
+        "--password-spray",
+        action="store_true",
+        help="Opt-in: after the scan, try a small default-credentials list against any "
+             "discovered login form (authorized targets only). Off by default.",
     )
     scan_parser.add_argument(
         "--format",

@@ -30,7 +30,191 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
 
-MODEL = os.environ.get("DREADAI_MODEL", "claude-sonnet-5")
+MODEL = os.environ.get("DREADAI_MODEL", "claude-sonnet-5")  # back-compat alias
+
+# Per-provider default model. DreadAI runs on Claude out of the box; set DREADAI_PROVIDER
+# to run on anything else — a local Qwen via Ollama (zero cost, offline), or any cloud
+# model (OpenAI/GPT, Google Gemini, Groq, OpenRouter, DeepSeek, Together, xAI, ...).
+_DEFAULT_MODELS = {
+    "anthropic": "claude-sonnet-5",
+    "ollama": "qwen2.5-coder:7b",
+    "local": "qwen2.5-coder:7b",
+    "openai": "gpt-4o-mini",
+    "openrouter": "openai/gpt-4o-mini",
+    "groq": "llama-3.3-70b-versatile",
+    "deepseek": "deepseek-chat",
+    "together": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    "xai": "grok-2-latest",
+    "google": "gemini-1.5-flash",
+}
+
+# Provider aliases people actually type.
+_ALIASES = {
+    "gpt": "openai", "chatgpt": "openai", "oai": "openai",
+    "claude": "anthropic", "anthropic-api": "anthropic",
+    "qwen": "ollama",
+    "gemini": "google", "google-genai": "google",
+    "grok": "xai",
+}
+
+# Cloud providers reachable through an OpenAI-compatible endpoint (langchain-openai's
+# ChatOpenAI + a base_url). This is the "anything" path — any OpenAI-compatible service
+# works by pointing DREADAI_BASE_URL/DREADAI_API_KEY at it, even one not listed here.
+_OPENAI_COMPATIBLE_BASES = {
+    "openai": None,  # api.openai.com (SDK default)
+    "openrouter": "https://openrouter.ai/api/v1",
+    "groq": "https://api.groq.com/openai/v1",
+    "deepseek": "https://api.deepseek.com/v1",
+    "together": "https://api.together.xyz/v1",
+    "xai": "https://api.x.ai/v1",
+}
+
+# Anthropic's OAuth beta header — sent alongside a login/bearer token (not an api key).
+_ANTHROPIC_OAUTH_HEADER = {"anthropic-beta": "oauth-2025-04-20"}
+
+
+def _load_chat_class(dotted: str):
+    """Import a chat-model class by 'module:Class' (a seam so providers stay optional)."""
+    import importlib
+
+    module_name, class_name = dotted.split(":", 1)
+    return getattr(importlib.import_module(module_name), class_name)
+
+
+def _local_base_url() -> str:
+    return (os.environ.get("DREADAI_BASE_URL") or os.environ.get("OLLAMA_HOST")
+            or "http://localhost:11434")
+
+
+def build_model():
+    """
+    Construct the chat model for the configured provider.
+
+    DREADAI_PROVIDER selects the backend (default "anthropic" = Claude):
+      - "anthropic"/"claude" — Claude, via ANTHROPIC_API_KEY *or* a login/OAuth bearer
+        token (ANTHROPIC_AUTH_TOKEN). Either works; no key needed if you're logged in.
+      - "ollama"/"qwen" — a local Qwen (or any Ollama model), zero cost and offline.
+      - "openai"/"gpt", "google"/"gemini", "groq", "openrouter", "deepseek", "together",
+        "xai" — cloud models. Any other value is treated as an OpenAI-compatible endpoint,
+        so *any* such service works via DREADAI_BASE_URL + DREADAI_API_KEY.
+
+    DREADAI_MODEL overrides the per-provider default; DREADAI_BASE_URL / OLLAMA_HOST point
+    at a local/remote endpoint; DREADAI_API_KEY carries the key for non-Anthropic providers.
+    """
+    provider = os.environ.get("DREADAI_PROVIDER", "anthropic").strip().lower()
+    provider = _ALIASES.get(provider, provider)
+    model = os.environ.get("DREADAI_MODEL") or _DEFAULT_MODELS.get(provider)
+
+    if provider == "anthropic":
+        return _build_anthropic(model or "claude-sonnet-5")
+    if provider == "google":
+        return _build_google(model or "gemini-1.5-flash")
+    if provider == "ollama":
+        return _build_ollama(model or "qwen2.5-coder:7b")
+    if provider == "local":
+        return _build_openai_compatible(
+            "local", model, default_base=_local_base_url().rstrip("/") + "/v1",
+            local_style=True)
+
+    # Everything else is an OpenAI-compatible endpoint: openai/gpt, groq, openrouter,
+    # deepseek, together, xai, a local vLLM/LM Studio, or any custom/unknown service.
+    return _build_openai_compatible(provider, model)
+
+
+def _build_anthropic(model: str):
+    """Claude via API key *or* login. An ANTHROPIC_API_KEY sends x-api-key; otherwise a
+    login/OAuth bearer token (ANTHROPIC_AUTH_TOKEN) is sent as Authorization: Bearer."""
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    token = (os.environ.get("ANTHROPIC_AUTH_TOKEN")
+             or os.environ.get("DREADAI_ANTHROPIC_AUTH_TOKEN"))
+    if api_key:
+        return ChatAnthropic(model=model, api_key=api_key)
+    if token:
+        return _anthropic_via_login(model, token)
+    # No explicit credential: hand back a client and let ChatAnthropic's own env
+    # resolution (or a clear auth error at call time) take over.
+    return ChatAnthropic(model=model)
+
+
+def _anthropic_via_login(model: str, token: str):
+    """Use a login/OAuth bearer token instead of an x-api-key.
+
+    ChatAnthropic always injects an (empty) x-api-key header, so we swap in anthropic
+    clients built with auth_token= — those send `Authorization: Bearer <token>` and the
+    OAuth beta header, and no x-api-key. This lets a logged-in user (e.g. Claude login /
+    `ANTHROPIC_AUTH_TOKEN`) drive DreadAI without a raw API key.
+    """
+    import anthropic
+
+    chat = ChatAnthropic(model=model, api_key="oauth-login")  # placeholder, overridden below
+    # This relies on ChatAnthropic's private _client/_async_client. If a future
+    # langchain-anthropic drops them, fail loudly with guidance rather than silently
+    # sending the bogus placeholder key as x-api-key.
+    if not (hasattr(chat, "_client") and hasattr(chat, "_async_client")):
+        raise RuntimeError(
+            "Claude login (ANTHROPIC_AUTH_TOKEN) relies on ChatAnthropic internals that "
+            "this langchain-anthropic version no longer exposes. Use an API key "
+            "(ANTHROPIC_API_KEY) instead, or pin langchain-anthropic."
+        )
+    chat._client = anthropic.Anthropic(
+        auth_token=token, default_headers=_ANTHROPIC_OAUTH_HEADER)
+    chat._async_client = anthropic.AsyncAnthropic(
+        auth_token=token, default_headers=_ANTHROPIC_OAUTH_HEADER)
+    return chat
+
+
+def _build_google(model: str):
+    try:
+        ChatGoogle = _load_chat_class("langchain_google_genai:ChatGoogleGenerativeAI")
+    except ImportError as exc:
+        raise RuntimeError(
+            "DreadAI's Google/Gemini provider needs 'langchain-google-genai' "
+            "(pip install langchain-google-genai) and a GOOGLE_API_KEY."
+        ) from exc
+    api_key = os.environ.get("DREADAI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    kwargs = {"model": model, "temperature": 0}
+    if api_key:
+        kwargs["google_api_key"] = api_key
+    return ChatGoogle(**kwargs)
+
+
+def _build_ollama(model: str):
+    """Prefer the native Ollama client (best tool-calling for Qwen); fall back to any
+    OpenAI-compatible client against Ollama's /v1 endpoint."""
+    base_url = _local_base_url().rstrip("/")
+    try:
+        ChatOllama = _load_chat_class("langchain_ollama:ChatOllama")
+        return ChatOllama(model=model, base_url=base_url, temperature=0)
+    except ImportError:
+        pass
+    return _build_openai_compatible(
+        "ollama", model, default_base=base_url + "/v1", local_style=True)
+
+
+def _build_openai_compatible(provider: str, model, default_base: str = None,
+                             local_style: bool = False):
+    model = model or _DEFAULT_MODELS.get(provider) or "gpt-4o-mini"
+    base_url = (os.environ.get("DREADAI_BASE_URL")
+                or default_base
+                or _OPENAI_COMPATIBLE_BASES.get(provider))
+    if local_style and base_url and not base_url.rstrip("/").endswith("/v1"):
+        base_url = base_url.rstrip("/") + "/v1"
+    try:
+        ChatOpenAI = _load_chat_class("langchain_openai:ChatOpenAI")
+    except ImportError as exc:
+        raise RuntimeError(
+            "DreadAI's OpenAI-compatible provider needs 'langchain-openai' "
+            "(pip install langchain-openai). For a local model, also install "
+            "'langchain-ollama' and run Ollama (ollama pull qwen2.5-coder:7b)."
+        ) from exc
+    # Local endpoints ignore the key; cloud ones read DREADAI_API_KEY / OPENAI_API_KEY.
+    api_key = (os.environ.get("DREADAI_API_KEY")
+               or os.environ.get("OPENAI_API_KEY")
+               or "not-needed")
+    kwargs = {"model": model, "temperature": 0, "api_key": api_key}
+    if base_url:
+        kwargs["base_url"] = base_url
+    return ChatOpenAI(**kwargs)
 
 
 def configure_tracing() -> dict:
@@ -60,7 +244,15 @@ SYSTEM = (
     "for both executives and engineers. Operate ONLY against targets the operator states they are "
     "authorized to test; internal-network assessment targets private ranges. You have no ability "
     "to poison name resolution or capture credentials — those live behind a separate human "
-    "authorization gate, by design."
+    "authorization gate, by design.\n\n"
+    "For depth beyond the built-in checks you have expert methodology on tap: call "
+    "list_security_skills to browse the installed Trail of Bits and secskills libraries "
+    "(attacking JWTs/OAuth/GraphQL, exploiting SSRF/deserialization, reviewing cryptography, "
+    "differential review, static analysis, and more), load_security_skill to pull one in, then "
+    "FOLLOW its methodology using your own tools. Drive real external tools with "
+    "run_external_tool — including 42crunch for a static API Security Audit of an OpenAPI "
+    "definition (OWASP API Top 10, 0-100 score). Reach for a skill or external tool when a task "
+    "needs a technique the built-in scanners don't cover."
 )
 
 
@@ -251,10 +443,12 @@ def assess_internal_network(cidr: str) -> dict:
     Read-only reconnaissance. This tool CANNOT poison name resolution or capture
     credentials; those active capabilities require a separate human authorization gate.
     """
+    _on_path(_SPEAR)
     import spear
+    from recon import tcp_connect_banner, tcp_ping
 
     try:
-        return spear.assess(cidr)
+        return spear.assess(cidr, prober=tcp_ping, connector=tcp_connect_banner)
     except ValueError as exc:  # e.g. a public range without explicit allowance
         return {"target": cidr, "error": str(exc)}
     except Exception as exc:  # noqa: BLE001
@@ -434,6 +628,42 @@ def install_external_tool(tool_name: str) -> dict:
     return {"installed": rc == 0, "tool": tool_name, "install_command": command, "returncode": rc}
 
 
+@tool
+def list_security_skills(query: str = "") -> dict:
+    """List security methodology skills (Trail of Bits + secskills) DreadAI can follow.
+
+    Optional `query` filters by substring over the skill id or description. Returns skill
+    ids ("plugin:name") with one-line descriptions; load one with load_security_skill to
+    get its full methodology, then carry it out with DreadAI's own tools. Works on any
+    backing model (Claude, a local Qwen, or a cloud model) — it is plain catalog data.
+    """
+    _on_path(Path(__file__).resolve().parent)
+    import skills as _skills
+
+    catalog = _skills.discover_skills()
+    q = query.strip().lower()
+    items = [
+        {"id": k, "description": v["description"]}
+        for k, v in sorted(catalog.items())
+        if not q or q in k.lower() or q in v["description"].lower()
+    ]
+    return {"count": len(items), "skills": items}
+
+
+@tool
+def load_security_skill(name: str) -> dict:
+    """Load a security skill's full methodology by id ("plugin:name") or bare name.
+
+    Returns the skill's instructions to FOLLOW (with DreadAI's own tools) plus its
+    supporting files. Call list_security_skills first to find the right one. On a miss it
+    returns an error with suggestions rather than failing.
+    """
+    _on_path(Path(__file__).resolve().parent)
+    import skills as _skills
+
+    return _skills.load_skill(name)
+
+
 TOOLS = [
     # Discovery -> scan -> confirm -> triage -> report, the professional workflow.
     discover_attack_surface,
@@ -450,12 +680,15 @@ TOOLS = [
     list_external_tools,
     run_external_tool,
     install_external_tool,
+    # Deep methodology: the Trail of Bits + secskills skill libraries, followed with our tools.
+    list_security_skills,
+    load_security_skill,
 ]
 
 
 def build_agent():
     configure_tracing()
-    return create_react_agent(ChatAnthropic(model=MODEL), TOOLS, prompt=SYSTEM)
+    return create_react_agent(build_model(), TOOLS, prompt=SYSTEM)
 
 
 def ask(prompt: str) -> str:

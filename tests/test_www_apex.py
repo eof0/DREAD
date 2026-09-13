@@ -77,3 +77,16 @@ def test_run_probe_marks_staged_output_so_probe_skips_temp_paths(monkeypatch) ->
 
     dread.run_probe("example.com", output_dir="/tmp/x")
     assert seen["env"] is None
+
+
+def test_target_supports_discovery_skips_local_and_ip():
+    from dread import _target_supports_discovery
+
+    # No point enumerating subdomains of these:
+    for t in ("http://localhost:5000", "localhost", "127.0.0.1", "http://127.0.0.1:8080",
+              "192.168.1.10", "app.localhost", "myhost.local", "singlelabel", "[::1]"):
+        assert _target_supports_discovery(t) is False, t
+
+    # Real registrable domains: discovery makes sense.
+    for t in ("example.com", "https://sub.example.com", "linuxcraft.io", "ryanwilson.io"):
+        assert _target_supports_discovery(t) is True, t

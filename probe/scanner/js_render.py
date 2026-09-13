@@ -67,7 +67,8 @@ def _warn_missing() -> None:
             _missing_notice_shown = True
 
 
-def render_page(url: str, allowed_netlocs, timeout_ms: int = DEFAULT_TIMEOUT_MS) -> RenderResult:
+def render_page(url: str, allowed_netlocs, timeout_ms: int = DEFAULT_TIMEOUT_MS,
+                proxy: dict | None = None) -> RenderResult:
     """Render ``url`` and return the same-site URLs its scripts reached. Best-effort."""
     origin = urlparse(url).netloc
     if origin not in allowed_netlocs:
@@ -81,7 +82,8 @@ def render_page(url: str, allowed_netlocs, timeout_ms: int = DEFAULT_TIMEOUT_MS)
     requested: list[str] = []
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
+            browser = playwright.chromium.launch(headless=True,
+                                                 **({"proxy": proxy} if proxy else {}))
             context = browser.new_context(ignore_https_errors=False, service_workers="block")
             page = context.new_page()
 

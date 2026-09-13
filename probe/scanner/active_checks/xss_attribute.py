@@ -16,7 +16,7 @@ from .common import finding, mutated
 
 
 def check(context, parameter):
-    token = f"dreadattr{secrets.token_hex(4)}"
+    token = f"qaattr{secrets.token_hex(4)}"
     # Close a double- or single-quoted attribute, then add our own boolean attribute.
     payload = f'x" {token}="1'
     response = context.probe(mutated(context.params, parameter, payload), module="xss-attr")

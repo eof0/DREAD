@@ -93,6 +93,7 @@ class NetworkScannerPlugin(BasePlugin):
 
     def _validate_service(self, host: str, port: int, expected_service: str) -> bool:
         """Validate service with protocol probes."""
+        sock = None
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(3)
@@ -126,8 +127,9 @@ class NetworkScannerPlugin(BasePlugin):
         except Exception:
             pass
         finally:
-            sock.close()
-        
+            if sock is not None:
+                sock.close()
+
         return False
 
     def scan(self, url_info: Dict, request_handler) -> List[Finding]:
@@ -162,8 +164,14 @@ class NetworkScannerPlugin(BasePlugin):
         provider_name = self.CDN_PROVIDERS.get(provider, provider or "Unknown")
         is_cdn = is_cf_ip or provider is not None
 
-        # Use high-performance scanner
-        all_ports = self.scanner.scan(hostname)
+        # Optional port scoping: when the operator restricts ports (e.g. --ports 3007),
+        # only scan those, so a scan of a single-port app doesn't wander to 80/443/8080.
+        scoped = url_info.get("scan_ports")
+        scanner = (
+            NetworkScanner(ports=scoped, timeout_ms=2000, concurrency=200)
+            if scoped else self.scanner
+        )
+        all_ports = scanner.scan(hostname)
         
         # Categorize findings
         web_ports_found = []

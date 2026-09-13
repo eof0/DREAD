@@ -18,6 +18,7 @@ from scanner.active_checks import (
     reflected_xss,
     sql_errors,
     sqli_boolean,
+    ssrf,
     ssti,
     traversal,
     xss_attribute,
@@ -42,6 +43,7 @@ CHECKS = [
     ssti.check,
     file_inclusion.check,
     prototype_pollution.check,
+    ssrf.check,
 ]
 
 
@@ -258,6 +260,8 @@ class WebVulnerabilitiesPlugin(BasePlugin):
 
         findings = dom_xss.scan_dom(response_url) if is_html else []
         self._tested = 0
+        # Aggressive mode fuzzes far more parameters per page (owned/authorized targets).
+        self._max_parameters = MAX_PARAMETERS * 6 if url_info.get("aggressive") else MAX_PARAMETERS
         origin_states: Dict = {}
 
         if is_html:
@@ -282,12 +286,55 @@ class WebVulnerabilitiesPlugin(BasePlugin):
             if not self._run_targets(endpoint, params, "POST", "form", _send,
                                      request_handler, origin_states, findings):
                 return findings
+
+        # Browser-captured API: fuzz the real fetch/XHR the app makes — the true attack
+        # surface of a JS/SPA. The crawler runs the browser once and hands the captured
+        # targets over via url_info; only fall back to launching our own browser when
+        # they aren't already provided (e.g. the plugin used directly).
+        if is_html and url_info.get("depth", 0) == 0:
+            captured = url_info.get("captured_targets")
+            if captured is None and url_info.get("render_js"):
+                captured = self._browser_targets(response_url, request_handler)
+            for target in (captured or []):
+                if not self._run_targets(target["endpoint"], target["params"],
+                                         target["method"], target["location"], _send,
+                                         request_handler, origin_states, findings):
+                    return findings
         return findings
+
+    def _browser_targets(self, url: str, request_handler) -> List[Dict]:
+        """Fuzz targets from the real requests a headless browser makes on the page."""
+        try:
+            from scanner.browser_crawler import (captured_to_fuzz_targets,
+                                                 crawl_interactive, session_auth)
+        except Exception:  # noqa: BLE001
+            return []
+        origin = _origin(url)
+        if origin is None:
+            return []
+        host = urlparse(url).hostname or ""
+        port = f":{urlparse(url).port}" if urlparse(url).port else ""
+        allowed = {host + port}
+        if host.startswith("www."):
+            allowed.add(host[4:] + port)
+        else:
+            allowed.add("www." + host + port)
+        # Carry the authenticated session into the browser so authed flows are reached
+        # (shared helper — same cookie shape/auth-header allowlist as the crawler).
+        cookies, headers = session_auth(request_handler, host)
+        try:
+            result = crawl_interactive(url, allowed, extra_headers=headers or None,
+                                       cookies=cookies or None)
+        except Exception:  # noqa: BLE001
+            return []
+        return captured_to_fuzz_targets(result.requests, allowed)
 
     def _run_targets(self, endpoint, params, method, location, send,
                      request_handler, origin_states, findings) -> bool:
         """Inject into one endpoint's params. Returns False when the global budget is spent."""
-        if method == "POST":
+        if location == "json":
+            baseline = request_handler.post(endpoint, json=params, allow_redirects=False)
+        elif method == "POST":
             baseline = request_handler.post(endpoint, data=params, allow_redirects=False)
         else:
             baseline = request_handler.get(endpoint, params=params, allow_redirects=False)
@@ -305,15 +352,16 @@ class WebVulnerabilitiesPlugin(BasePlugin):
             baseline,
             params,
             send,
-            endpoint_budget=MAX_PARAMETERS * MAX_PROBES_PER_PARAMETER,
+            endpoint_budget=self._max_parameters * MAX_PROBES_PER_PARAMETER,
             baseline_sql=baseline_sql,
             origin_state=origin_states.setdefault(
-                endpoint_origin, OriginState(MAX_PARAMETERS * MAX_PROBES_PER_PARAMETER * 2)),
+                endpoint_origin,
+                OriginState(self._max_parameters * MAX_PROBES_PER_PARAMETER * 2)),
             method=method,
             location=location,
         )
         for parameter in params:
-            if self._tested >= MAX_PARAMETERS:
+            if self._tested >= self._max_parameters:
                 return False
             self._tested += 1
             for check in CHECKS:

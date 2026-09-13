@@ -57,6 +57,7 @@ SCAN_PROFILES = {
             "wordpress_scan",
             "web_vulnerabilities",
             "access_control",
+            "auth_bypass",
             "cve_correlation",
             "api_discovery",
             "cors_check",
@@ -80,6 +81,7 @@ SCAN_PROFILES = {
             "wordpress_scan",
             "web_vulnerabilities",
             "access_control",
+            "auth_bypass",
             "cve_correlation",
             "api_discovery",
             "cors_check",
@@ -128,6 +130,10 @@ class ScanConfig:
         verbose: bool = False,
         active_scan_mode: str = "safe",
         render_js: Optional[bool] = None,
+        aggressive: bool = False,
+        ports: Optional[str] = None,
+        proxies: Optional[List[str]] = None,
+        password_spray: bool = False,
         auth: Optional[Dict[str, Any]] = None,
         auth_secondary: Optional[Dict[str, Any]] = None,
         cookies: Optional[Dict[str, str]] = None,
@@ -156,7 +162,18 @@ class ScanConfig:
         self.max_urls = _resolve(max_urls, "max_urls", 50)
         self.rate_limit = _resolve(rate_limit, "rate_limit", 1.0)
         self.parallel_workers = _resolve(parallel_workers, "parallel_workers", 8)
-        self.render_js = _resolve(render_js, "render_js", False)
+        # Aggressive/offensive mode: for targets you own or are authorized to hammer.
+        # It always drives the headless browser (to reach the JS/SPA attack surface)
+        # and raises probe budgets; the engine and active plugin read it.
+        self.aggressive = bool(aggressive)
+        self.render_js = True if self.aggressive else _resolve(render_js, "render_js", False)
+        # Optional port scope (e.g. "3007", "80,443", "1-1000"). When set, the network
+        # scanner stays on these ports instead of the top-100.
+        self.ports = ports.strip() if isinstance(ports, str) and ports.strip() else None
+        # Optional outbound proxies (rotated round-robin). Empty = direct connection.
+        self.proxies = [str(p).strip() for p in (proxies or []) if str(p).strip()]
+        # Opt-in end-of-scan credential spray (small default-creds list, off by default).
+        self.password_spray = bool(password_spray)
         self.output_name = output_name
         self.output_formats = output_formats or ["json", "md", "pdf"]
         self.output_dir = output_dir
@@ -176,6 +193,7 @@ class ScanConfig:
                 "wordpress_scan",
                 "web_vulnerabilities",
                 "access_control",
+                "auth_bypass",
                 "cve_correlation",
                 "api_discovery",
                 "cors_check",
@@ -192,6 +210,7 @@ class ScanConfig:
                 "wordpress_scan",
                 "web_vulnerabilities",
                 "access_control",
+                "auth_bypass",
                 "cve_correlation",
                 "api_discovery",
                 "cors_check",

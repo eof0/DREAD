@@ -54,6 +54,7 @@ def build_handler(
     cookies: Optional[Dict[str, str]] = None,
     headers: Optional[Dict[str, str]] = None,
     verify_ssl: bool = True,
+    proxies: Optional[list] = None,
 ) -> RequestHandler:
     """Build a ``RequestHandler`` and tag it with ``.authenticated`` / ``.secondary``."""
     handler = RequestHandler(
@@ -63,6 +64,7 @@ def build_handler(
         cookies=cookies,
         headers=headers,
         verify_ssl=verify_ssl,
+        proxies=proxies,
     )
     # Marked here so plugins can tell an authenticated session from an anonymous
     # one without inspecting the requests session internals. Only real

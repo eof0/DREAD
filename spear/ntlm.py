@@ -56,8 +56,10 @@ def build_type2(challenge: bytes = DEFAULT_CHALLENGE, target_name: str = "WORKGR
     tn = target_name.encode("utf-16-le")
     ti = _target_info(target_name)
 
-    # Fixed header is 48 bytes; payload (target name, then target info) follows.
-    header_len = 48
+    # Fixed header is 56 bytes (48 + the 8-byte Version field, present because our
+    # NegotiateFlags set NTLMSSP_NEGOTIATE_VERSION — consistent with build_type3);
+    # payload (target name, then target info) follows.
+    header_len = 56
     tn_offset = header_len
     ti_offset = tn_offset + len(tn)
 
@@ -69,6 +71,7 @@ def build_type2(challenge: bytes = DEFAULT_CHALLENGE, target_name: str = "WORKGR
         + challenge                                 # ServerChallenge (8)
         + b"\x00" * 8                               # Reserved
         + _field(len(ti), ti_offset)                # TargetInfoFields
+        + b"\x00" * 8                               # Version (NEGOTIATE_VERSION is set)
     )
     assert len(header) == header_len, len(header)
     return header + tn + ti

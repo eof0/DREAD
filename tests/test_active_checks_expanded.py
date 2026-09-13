@@ -162,3 +162,43 @@ def test_css_marker_in_plain_html_is_not_css_injection():
     assert not any("CSS Injection" in t for t in _titles(findings))
 
 
+
+
+def test_open_redirect_via_meta_refresh_is_detected():
+    def responder(params):
+        v = params["url"]
+        if isinstance(v, list):
+            v = v[0]
+        if v.startswith("https://example.com/qa-redirect-"):
+            # DreadCTF-style: external URL returns 200 with a meta-refresh, not a 302.
+            return response(f'<html><head><meta http-equiv="refresh" content="2;url={v}">'
+                            f'</head><body>Redirecting to {v}</body></html>')
+        return response("<html>ok</html>")
+
+    findings = scan("url", responder)
+    assert any("Open Redirect" in t for t in _titles(findings))
+
+
+def test_open_redirect_via_javascript_location_is_detected():
+    def responder(params):
+        v = params["next"]
+        if isinstance(v, list):
+            v = v[0]
+        if v.startswith("https://example.com/qa-redirect-"):
+            return response(f'<html><body><script>location.href = "{v}"</script></body></html>')
+        return response("<html>ok</html>")
+
+    findings = scan("next", responder)
+    assert any("Open Redirect" in t for t in _titles(findings))
+
+
+def test_reflected_destination_without_redirect_is_not_flagged():
+    # The payload merely appearing in the page (e.g. echoed) is NOT an open redirect.
+    def responder(params):
+        v = params["url"]
+        if isinstance(v, list):
+            v = v[0]
+        return response(f"<html><body>You searched for {v}</body></html>")
+
+    findings = scan("url", responder)
+    assert not any("Open Redirect" in t for t in _titles(findings))

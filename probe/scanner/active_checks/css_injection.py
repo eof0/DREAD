@@ -16,7 +16,7 @@ from .common import finding, mutated
 
 
 def check(context, parameter):
-    token = f"dreadcss{secrets.token_hex(4)}"
+    token = f"qacss{secrets.token_hex(4)}"
     # A payload that closes a selector/rule and starts our own — reflected into a
     # <style> block it becomes a real rule; reflected into text it's just the marker.
     payload = f"}}#{token}{{color:red}}"

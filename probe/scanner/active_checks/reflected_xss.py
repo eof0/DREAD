@@ -6,15 +6,15 @@ from .common import finding, mutated
 
 
 def check(context, parameter):
-    token = f"dreadxss{secrets.token_hex(4)}"
-    payload = f'\"><dread-probe data-token="{token}">'
+    token = f"qaxss{secrets.token_hex(4)}"
+    payload = f'\"><qa-probe data-token="{token}">'
     response = context.probe(mutated(context.params, parameter, payload), module="xss")
     if response is None or "text/html" not in response.headers.get("Content-Type", "").lower():
         return []
     if token in context.baseline.text:
         return []
     tag = BeautifulSoup(response.text, "html.parser").find(
-        "dread-probe", attrs={"data-token": token}
+        "qa-probe", attrs={"data-token": token}
     )
     if tag is None:
         return []

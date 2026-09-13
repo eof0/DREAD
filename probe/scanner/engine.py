@@ -1,6 +1,7 @@
 from scanner.config import ScanConfig
 from scanner.auth import build_handler
 from scanner.crawler import Crawler
+from scanner.interrupt import KeypressCanceller
 from scanner.analysis.attack_chain_engine import build_attack_chains
 from scanner.analysis.findings import group_findings
 from scanner.analysis.prioritization import prioritize_findings
@@ -232,12 +233,14 @@ class ScanEngine:
     def __init__(self, config: ScanConfig):
         self.config = config
         self.verbose = getattr(config, 'verbose', False)
+        proxies = getattr(config, "proxies", None)
         self.request_handler = build_handler(
             config.rate_limit,
             self.verbose,
             auth=getattr(config, "auth", None),
             cookies=getattr(config, "cookies", None),
             headers=getattr(config, "extra_headers", None),
+            proxies=proxies,
         )
         secondary_auth = getattr(config, "auth_secondary", None)
         if secondary_auth:
@@ -246,6 +249,7 @@ class ScanEngine:
                 self.verbose,
                 auth=secondary_auth,
                 cookies=secondary_auth.get("cookies"),
+                proxies=proxies,
             )
         self.crawler = Crawler(
             config.target_url,
@@ -253,9 +257,13 @@ class ScanEngine:
             config.max_urls,
             verbose=self.verbose,
             render_js=getattr(config, "render_js", False),
+            aggressive=getattr(config, "aggressive", False),
+            scan_ports=getattr(config, "ports", None),
+            proxies=proxies,
         )
         self.plugins = []
         self.findings = []
+        self._cancelled = False
         self.scan_id = f"scan_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         self.console = ColoredConsole()
         self.max_workers = getattr(config, 'parallel_workers', 8)
@@ -277,6 +285,7 @@ class ScanEngine:
             "waf_detection": "plugins.waf_detection.WAFDetectionPlugin",
             "cors_check": "plugins.cors_check.CORSCheckPlugin",
             "misconfiguration": "plugins.misconfiguration.MisconfigurationPlugin",
+            "auth_bypass": "plugins.auth_bypass.AuthBypassPlugin",
         }
 
         for plugin_name in self.config.enabled_plugins:
@@ -320,10 +329,61 @@ class ScanEngine:
             logger.error(f"Plugin {plugin_name} crashed on {url_info['url']}: {e}", exc_info=True)
             return (plugin_name, [], str(e))
 
+    def _request_cancel(self) -> None:
+        """Operator pressed quit: stop new work, wind down in-flight requests, keep
+        the findings gathered so far so we can still write a (partial) report."""
+        if self._cancelled:
+            return
+        self._cancelled = True
+        try:
+            self.request_handler.abort()
+        except Exception:  # noqa: BLE001
+            pass
+        self.console.warning("Quit requested — stopping and saving the partial report...")
+
+    def _run_password_spray(self, urls) -> None:
+        """Opt-in: spray a small default-credential list at any discovered login form."""
+        from scanner import password_spray as ps
+        from plugins.base_plugin import Finding
+
+        self.console.warning("Password spray enabled — trying default credentials against "
+                             "discovered login forms (authorized targets only)...")
+        seen_actions = set()
+        checked = 0
+        for url_info in urls:
+            response = url_info.get("response")
+            html = getattr(response, "text", "") if response is not None else ""
+            if not html or "password" not in html.lower():
+                continue
+            for form in ps.find_login_forms(html, url_info["url"]):
+                if form["action"] in seen_actions:
+                    continue
+                seen_actions.add(form["action"])
+                checked += 1
+                valid = ps.spray_login(self.request_handler, form)
+                for username, password in valid:
+                    self.findings.append(Finding(
+                        plugin_name="password_spray",
+                        severity="critical",
+                        title="Default/weak credentials accepted",
+                        description=(
+                            f"The login form at {form['page']} accepted the default "
+                            f"credentials {username!r}:{password!r}."
+                        ),
+                        url=form["page"],
+                        evidence={"login_action": form["action"], "username": username,
+                                  "password": password, "category": "authentication"},
+                        remediation=(
+                            "Remove default/vendor accounts, enforce a strong password policy, "
+                            "and add rate limiting / lockout on the login endpoint."
+                        ),
+                    ))
+        self.console.info(f"Password spray checked {checked} login form(s).")
+
     def run_scan(self):
         """
         Execute full scan workflow with parallel plugin execution.
-        
+
         Returns:
             Complete scan report dictionary
         """
@@ -341,10 +401,18 @@ class ScanEngine:
             self.console.error("No plugins loaded - scan cannot continue")
             raise RuntimeError("No plugins loaded")
 
+        # Press-a-key-to-stop control spans the whole scan (no-op off a TTY).
+        canceller = KeypressCanceller(self._request_cancel)
+        canceller.__enter__()
+        if canceller.enabled:
+            self.console.info("Press 'q' at any time to stop the scan and save the "
+                              "partial report.")
+
         self.console.info("Phase 1: Crawling target...")
         if self.verbose:
             self.console.info(f"[VERBOSE] Crawl config: depth={self.config.depth}, max_urls={self.config.max_urls}")
-        urls = self.crawler.crawl(self.request_handler)
+        urls = self.crawler.crawl(self.request_handler,
+                                  cancel_check=lambda: self._cancelled)
         
         if not urls:
             self.console.warning("No URLs discovered during crawling")
@@ -369,6 +437,12 @@ class ScanEngine:
                     timeout=5.0,
                     return_when=FIRST_COMPLETED,
                 )
+
+                if self._cancelled:
+                    for fut in pending:
+                        fut.cancel()
+                    pending = set()
+                    break
 
                 if not done:
                     status = _pending_plugin_status(pending, future_to_task)
@@ -412,6 +486,16 @@ class ScanEngine:
                     except Exception as e:
                         logger.error(f"Unexpected error processing task: {e}", exc_info=True)
 
+        canceller.__exit__(None, None, None)
+        if self._cancelled:
+            self.console.warning(
+                f"Scan cancelled by operator — writing PARTIAL report "
+                f"({completed_tasks}/{total_tasks} checks completed).")
+
+        # Deferred, opt-in credential spray (runs last, only when explicitly enabled).
+        if getattr(self.config, "password_spray", False) and not self._cancelled:
+            self._run_password_spray(urls)
+
         if failed_plugins:
             self.console.warning(f"{len(failed_plugins)} plugin executions failed")
             for plugin_name, url, error in failed_plugins[:5]:
@@ -431,6 +515,9 @@ class ScanEngine:
 
         self.console.info("Generating report...")
         report = self._generate_report(duration, attack_chains, grouped_findings)
+        if self._cancelled and isinstance(report.get("statistics"), dict):
+            report["statistics"]["cancelled"] = True
+            report["statistics"]["partial"] = True
         output_name = self.config.output_name or self._default_output_name()
         
         try:

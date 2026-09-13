@@ -107,3 +107,41 @@ def test_javascript_bundle_endpoints_are_discovered():
 
     assert "https://example.test/api/v1/login" in paths
     assert "https://example.test/dashboard/reports" in paths
+
+
+class Strict404Handler:
+    """Serves the listed pages; everything else 404s (so it isn't a catch-all)."""
+
+    def __init__(self, pages):
+        self.pages = pages
+
+    def get(self, url, **kwargs):
+        return self.pages.get(url, FakeResponse("not found", status=404))
+
+
+def test_seed_urls_discovers_unlinked_common_routes():
+    base = "https://example.test/"
+    # /login and /redirect exist (200/302); /admin is 404 (absent); robots/sitemap empty.
+    pages = {
+        "https://example.test/login": FakeResponse("<html>login</html>", status=200),
+        "https://example.test/redirect": FakeResponse("", status=302),
+    }
+    crawler = Crawler(base, max_depth=2, max_urls=50)
+
+    seeds = crawler.seed_urls(Strict404Handler(pages))
+
+    assert "https://example.test/login" in seeds
+    assert "https://example.test/redirect" in seeds       # unlinked but exists (302)
+    assert "https://example.test/admin" not in seeds       # 404 -> not queued
+
+
+def test_common_routes_skipped_on_catch_all_server():
+    # An SPA router that returns 200 for EVERY path: route-probing would false-positive,
+    # so it must be skipped (no phantom routes queued).
+    class CatchAll:
+        def get(self, url, **kwargs):
+            return FakeResponse("<html>app</html>", status=200)
+
+    crawler = Crawler("https://spa.test/", max_depth=2, max_urls=50)
+    seeds = crawler.seed_urls(CatchAll())
+    assert not any(seed.endswith(("/login", "/admin", "/redirect")) for seed in seeds)

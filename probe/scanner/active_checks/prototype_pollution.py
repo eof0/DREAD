@@ -14,7 +14,7 @@ from .common import finding
 
 
 def check(context, parameter):
-    token = f"dreadpp{secrets.token_hex(3)}"
+    token = f"qapp{secrets.token_hex(3)}"
     marker = f"polluted{secrets.token_hex(3)}"
     if marker in (context.baseline.text if context.baseline is not None else ""):
         return []

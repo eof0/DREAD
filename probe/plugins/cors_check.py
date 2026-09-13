@@ -9,13 +9,25 @@ credentials: any website can then read the victim's authenticated responses.
 
 from __future__ import annotations
 
+import re
 from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
 from plugins.base_plugin import BasePlugin, Finding
 
 # A believable attacker origin. Reflection of this exact value is the tell.
-PROBE_ORIGIN = "https://dread-cors-probe.example"
+PROBE_ORIGIN = "https://qa-cors-probe.example"
+
+
+def _looks_like_api(url: str) -> bool:
+    """A path that is probably a JSON/GraphQL API worth a CORS check on any page."""
+    path = urlparse(url).path.lower()
+    if any(seg in path for seg in ("/api/", "/api.", "/graphql", "/rest/")) \
+            or path.endswith(("/api", "/graphql")):
+        return True
+    # Version-prefixed APIs sit at the path ROOT (/v1/users), not mid-path
+    # (/guide/v1/intro) — the old substring match flagged ordinary content pages.
+    return bool(re.match(r"/v[0-9]+/", path))
 
 
 def _header(headers, name: str) -> str:
@@ -87,9 +99,12 @@ class CORSCheckPlugin(BasePlugin):
         return "Detects permissive Cross-Origin Resource Sharing configurations"
 
     def scan(self, url_info: Dict, request_handler) -> List[Finding]:
-        if url_info.get("depth", 0) != 0:
-            return []
+        # Test the entry point, plus every API endpoint the browser captured — the
+        # real CORS bugs live on /api/* calls, not the landing page.
         url = url_info["url"]
+        if url_info.get("depth", 0) != 0 and not url_info.get("captured") \
+                and not _looks_like_api(url):
+            return []
         response = request_handler.get(url, headers={"Origin": PROBE_ORIGIN})
         if response is None:
             return []

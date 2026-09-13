@@ -172,7 +172,7 @@ def test_get_forms_submit_only_successful_controls_and_keep_repeated_values():
 def test_detects_reflected_xss_only_when_payload_becomes_markup():
     def responder(params):
         value = params["q"]
-        if "dread-probe" in value:
+        if "qa-probe" in value:
             return response(f"<html>{value}</html>")
         return response()
 
@@ -331,7 +331,7 @@ def test_detects_windows_path_traversal_signature():
 def test_detects_exact_open_redirect_without_following_it():
     def responder(params):
         destination = params["next"]
-        if destination.startswith("https://example.com/dread-redirect-"):
+        if destination.startswith("https://example.com/qa-redirect-"):
             return response("", 302, {"Location": destination})
         return response()
 
@@ -344,7 +344,7 @@ def test_detects_exact_open_redirect_without_following_it():
         kwargs
         for _url, kwargs in handler.calls
         if (kwargs.get("params") or {}).get("next", "").startswith(
-            "https://example.com/dread-redirect-"
+            "https://example.com/qa-redirect-"
         )
     ]
     assert redirect_calls[0]["allow_redirects"] is False

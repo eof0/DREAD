@@ -79,7 +79,7 @@ DOM_PROBE_SCRIPT = r"""
       return original.call(this, value, ...args);
     };
   }
-  window.__dread_dom_events = events;
+  window.__qa_dom_events = events;
 })();
 """
 
@@ -99,11 +99,11 @@ def _origin(url: str):
 
 def build_probe_url(url: str) -> tuple[str, str, str]:
     parsed = urlparse(Request("GET", url).prepare().url)
-    query_token = f"dread-q-{secrets.token_hex(8)}"
-    fragment_token = f"dread-f-{secrets.token_hex(8)}"
+    query_token = f"qa-q-{secrets.token_hex(8)}"
+    fragment_token = f"qa-f-{secrets.token_hex(8)}"
     query = parse_qsl(parsed.query, keep_blank_values=True)
-    query.append(("dread_dom", query_token))
-    probe = parsed._replace(query=urlencode(query, doseq=True), fragment=f"dread_dom={fragment_token}")
+    query.append(("qa_dom", query_token))
+    probe = parsed._replace(query=urlencode(query, doseq=True), fragment=f"qa_dom={fragment_token}")
     return urlunparse(probe), query_token, fragment_token
 
 
@@ -165,7 +165,7 @@ def scan_dom(url: str, timeout_ms: int = 10000) -> list[Finding]:
             context.route("**/*", route_handler)
             page.add_init_script(script)
             page.goto(probe_url, timeout=timeout_ms, wait_until="domcontentloaded")
-            events = page.evaluate("window.__dread_dom_events || []")
+            events = page.evaluate("window.__qa_dom_events || []")
             context.close()
             browser.close()
     except Exception as exc:

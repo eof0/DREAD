@@ -69,3 +69,22 @@ def test_plugin_only_scans_root_and_reports_reflection():
 
     # Non-root pages are skipped to avoid duplicate findings.
     assert plugin.scan({"url": "https://app.example/page", "depth": 1}, _Handler(None)) == []
+
+
+def test_cors_tested_on_captured_api_endpoint():
+    # /api/me is a browser-captured endpoint (depth 1, captured=True) — CORS must run.
+    plugin = CORSCheckPlugin()
+    findings = plugin.scan(
+        {"url": "https://app.example/api/me", "depth": 1, "captured": True}, _Handler(None))
+    assert any("CORS" in f.title for f in findings)
+
+
+def test_cors_runs_on_api_paths_even_without_captured_flag():
+    plugin = CORSCheckPlugin()
+    findings = plugin.scan({"url": "https://app.example/api/profile", "depth": 2}, _Handler(None))
+    assert any("CORS" in f.title for f in findings)
+
+
+def test_cors_skips_ordinary_deep_pages():
+    plugin = CORSCheckPlugin()
+    assert plugin.scan({"url": "https://app.example/about", "depth": 3}, _Handler(None)) == []

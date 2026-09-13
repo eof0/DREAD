@@ -14,7 +14,7 @@ import time
 import random
 import threading
 from urllib.parse import urljoin, urlparse
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -93,6 +93,9 @@ class RequestHandler:
         headers: Optional[Dict] = None,
         verify_ssl: bool = True,
         verbose: bool = False,
+        proxies: Optional[List[str]] = None,
+        max_host_failures: int = 4,
+        cache_enabled: bool = True,
     ):
         """
         Initialize request handler.
@@ -118,7 +121,31 @@ class RequestHandler:
         self.verbose = verbose
         self.last_request_time = 0
         self._rate_limit_lock = threading.Lock()
-        
+
+        # Optional proxy rotation (round-robin, per request). Empty = no proxy.
+        self._proxies = [p.strip() for p in (proxies or []) if str(p).strip()]
+        self._proxy_idx = 0
+        self._proxy_lock = threading.Lock()
+
+        # Dead-host circuit breaker: after this many consecutive connect/DNS/timeout
+        # failures for a host, mark it down and stop scanning it (no point testing an
+        # offline subdomain). A success resets the host's counter.
+        self._max_host_failures = max(1, int(max_host_failures))
+        self._host_failures: Dict[str, int] = {}
+        self._down_hosts: set = set()
+        self._failure_lock = threading.Lock()
+
+        # Per-scan GET response cache — collapses the many duplicate page fetches
+        # (crawl + every plugin re-requesting the same URL) into one round-trip.
+        self._cache_enabled = bool(cache_enabled)
+        self._cache: Dict[tuple, requests.Response] = {}
+        self._cache_lock = threading.Lock()
+        self._cache_max = 4096
+
+        # Hard abort: when the operator quits the scan, every subsequent request
+        # returns None immediately so the crawl and all plugins wind down fast.
+        self._aborted = threading.Event()
+
         # Create session with connection pooling. The redirect-safe session
         # drops the cookie jar and any operator-supplied secret headers when a
         # redirect crosses to a different host.
@@ -130,8 +157,11 @@ class RequestHandler:
         # (error-based SQLi, stack traces), so we must not retry it away or raise on it
         # — retry only transient infrastructure errors, and always hand back the final
         # response so plugins can inspect the error body.
+        # connect=1: fail fast on a dead host (DNS/refused) instead of retrying it 3x —
+        # the circuit breaker then skips it entirely. Status retries stay at max_retries.
         retry_strategy = Retry(
             total=max_retries,
+            connect=1,
             backoff_factor=backoff_factor,
             status_forcelist=[429, 502, 503, 504],
             allowed_methods=["HEAD", "GET", "OPTIONS", "POST"],
@@ -216,28 +246,115 @@ class RequestHandler:
 
             self.last_request_time = time.time()
     
+    def abort(self) -> None:
+        """Stop all further network activity (operator quit) — every request returns None."""
+        self._aborted.set()
+
+    @property
+    def aborted(self) -> bool:
+        return self._aborted.is_set()
+
+    def is_host_down(self, host: str) -> bool:
+        """True once a host has crossed the consecutive-failure threshold."""
+        return host in self._down_hosts
+
+    @staticmethod
+    def _host_of(url: str) -> str:
+        try:
+            return (urlparse(url).hostname or "").lower()
+        except ValueError:
+            return ""
+
+    def _next_proxy(self) -> Optional[Dict[str, str]]:
+        """Round-robin the configured proxy list; None when no proxies are set."""
+        if not self._proxies:
+            return None
+        with self._proxy_lock:
+            proxy = self._proxies[self._proxy_idx % len(self._proxies)]
+            self._proxy_idx += 1
+        return {"http": proxy, "https": proxy}
+
+    @staticmethod
+    def _cache_key(method: str, url: str, kwargs: dict):
+        """Key a cacheable GET by url + params + per-request headers + redirect policy.
+
+        Headers matter because cors_check sends a distinct Origin on the same URL and
+        must get its own request, not the plain-fetch cache entry.
+        """
+        params = kwargs.get("params")
+        if isinstance(params, dict):
+            params_key = tuple(sorted((str(k), str(v)) for k, v in params.items()))
+        elif params:
+            params_key = tuple((str(k), str(v)) for k, v in params)
+        else:
+            params_key = ()
+        headers = kwargs.get("headers") or {}
+        headers_key = tuple(sorted((str(k).lower(), str(v)) for k, v in headers.items()))
+        return (method, url, params_key, headers_key, bool(kwargs.get("allow_redirects", True)))
+
+    def _record_failure(self, host: str) -> None:
+        if not host:
+            return
+        with self._failure_lock:
+            count = self._host_failures.get(host, 0) + 1
+            self._host_failures[host] = count
+            newly_down = count >= self._max_host_failures and host not in self._down_hosts
+            if newly_down:
+                self._down_hosts.add(host)
+        if newly_down:
+            print(f"[!] {host} appears offline after {count} failed requests — "
+                  "skipping further scanning of this host.")
+
+    def _record_success(self, host: str) -> None:
+        if host and self._host_failures.get(host):
+            with self._failure_lock:
+                self._host_failures[host] = 0
+
     def _make_request(
         self,
         method: str,
         url: str,
         **kwargs
     ) -> Optional[requests.Response]:
-        """Make HTTP request with rate limiting and error handling."""
+        """Make HTTP request with caching, a dead-host breaker, proxy rotation, and
+        rate limiting."""
+        no_cache = kwargs.pop("no_cache", False)
+
+        # Operator aborted the scan: stop everything immediately.
+        if self._aborted.is_set():
+            return None
+
+        host = self._host_of(url)
+
+        # Circuit breaker: never touch a host already judged down.
+        if host and host in self._down_hosts:
+            return None
+
+        # Per-scan GET cache (safe: GET is idempotent). Injection GETs carry unique
+        # mutated params -> unique keys, so they never collide with a baseline fetch.
+        cache_key = None
+        if self._cache_enabled and method == "GET" and not no_cache:
+            cache_key = self._cache_key(method, url, kwargs)
+            with self._cache_lock:
+                cached = self._cache.get(cache_key)
+            if cached is not None:
+                return cached
+
         if self.verbose:
             print(f"[VERBOSE] Request: {method} {url}")
             if kwargs.get('headers'):
                 print(f"[VERBOSE]   Headers: {kwargs['headers']}")
             if kwargs.get('data'):
-                print(f"[VERBOSE]   Data: {kwargs['data'][:200]}..." if len(str(kwargs['data'])) > 200 else f"[VERBOSE]   Data: {kwargs['data']}")
+                _data_str = str(kwargs['data'])
+                print(f"[VERBOSE]   Data: {_data_str[:200]}..." if len(_data_str) > 200 else f"[VERBOSE]   Data: {_data_str}")
 
         self._respect_rate_limit()
 
-        # Merge timeout if not provided
         if "timeout" not in kwargs:
             kwargs["timeout"] = self.timeout
-
-        # Set SSL verification
         kwargs["verify"] = self.verify_ssl
+        if self._proxies and "proxies" not in kwargs:
+            kwargs["proxies"] = self._next_proxy()
 
         try:
             start_time = time.time()
@@ -251,24 +368,33 @@ class RequestHandler:
                 if response.headers.get('Server'):
                     print(f"[VERBOSE]   Server: {response.headers.get('Server')}")
 
+            self._record_success(host)
+            if cache_key is not None:
+                with self._cache_lock:
+                    if len(self._cache) < self._cache_max:
+                        self._cache[cache_key] = response
             return response
-            
+
         except requests.exceptions.SSLError as e:
             print(f"[!] SSL Error for {url}: {str(e)}")
+            self._record_failure(host)
             return None
-            
+
         except requests.exceptions.ConnectionError as e:
             print(f"[!] Connection Error for {url}: {str(e)}")
+            self._record_failure(host)
             return None
-            
+
         except requests.exceptions.Timeout as e:
             print(f"[!] Timeout for {url}: {str(e)}")
+            self._record_failure(host)
             return None
-            
+
         except requests.exceptions.TooManyRedirects as e:
+            # A working host that over-redirects is not "down" — don't count it.
             print(f"[!] Too many redirects for {url}: {str(e)}")
             return None
-            
+
         except requests.exceptions.RequestException as e:
             print(f"[!] Request failed for {url}: {str(e)}")
             return None

@@ -26,8 +26,8 @@ def test_probe_url_preserves_target_origin_and_adds_query_and_fragment_canaries(
         "example.test",
         "/app",
     )
-    assert parse_qs(parsed.query)["dread_dom"] == [query_token]
-    assert parsed.fragment == f"dread_dom={fragment_token}"
+    assert parse_qs(parsed.query)["qa_dom"] == [query_token]
+    assert parsed.fragment == f"qa_dom={fragment_token}"
     assert query_token != fragment_token
 
 
@@ -91,7 +91,7 @@ def test_browser_detects_fragment_value_reaching_inner_html():
 
 
 def test_probe_script_is_present_and_does_not_include_a_payload():
-    assert "__dread_dom_events" in DOM_PROBE_SCRIPT
+    assert "__qa_dom_events" in DOM_PROBE_SCRIPT
     assert "innerHTML" in DOM_PROBE_SCRIPT
     assert "outerHTML" in DOM_PROBE_SCRIPT
     assert "insertAdjacentHTML" in DOM_PROBE_SCRIPT

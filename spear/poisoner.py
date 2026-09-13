@@ -79,6 +79,13 @@ def run_poisoner(
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind(("0.0.0.0", port))
+            if proto == "LLMNR":
+                # LLMNR queries arrive on multicast 224.0.0.252 — without joining the
+                # group the kernel never delivers them and we answer nothing. NBT-NS is
+                # broadcast, so it needs no join.
+                mreq = struct.pack("=4sl", socket.inet_aton(_LLMNR_ADDR[0]),
+                                   socket.INADDR_ANY)
+                sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
             sock.settimeout(0.5)
             listeners.append((proto, sock, builder))
         except OSError as e:
