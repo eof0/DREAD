@@ -371,6 +371,55 @@ def test_limits_each_page_to_six_parameters():
     assert mutated == {f"p{i}" for i in range(6)}
 
 
+def test_fuzzes_parameters_concurrently_not_one_at_a_time():
+    import threading
+    import time
+
+    class _ConcurrencyProbeHandler:
+        """Records how many mutated-parameter probes were ever in flight at once."""
+
+        def __init__(self, delay=0.005):
+            self.delay = delay
+            self._lock = threading.Lock()
+            self._current = 0
+            self.max_concurrent = 0
+
+        def get(self, url, **kwargs):
+            params = kwargs.get("params")
+            if params is None:
+                return response()
+            with self._lock:
+                self._current += 1
+                self.max_concurrent = max(self.max_concurrent, self._current)
+            time.sleep(self.delay)
+            with self._lock:
+                self._current -= 1
+            return response("<html>ok</html>")
+
+    query = "&".join(f"p{i}=safe" for i in range(8))
+    handler = _ConcurrencyProbeHandler()
+
+    WebVulnerabilitiesPlugin().scan(
+        {"url": f"https://example.test/?{query}", "depth": 0}, handler)
+
+    # 6 parameters fit the budget under a default fuzz concurrency of 4 -> some overlap.
+    assert handler.max_concurrent >= 3
+
+
+def test_aggressive_mode_widens_fuzz_concurrency():
+    from plugins.web_vulnerabilities import AGGRESSIVE_FUZZ_CONCURRENCY, DEFAULT_FUZZ_CONCURRENCY
+
+    plugin = WebVulnerabilitiesPlugin()
+    plugin.scan({"url": "https://example.test/?p=safe", "depth": 0}, Handler())
+    assert plugin._fuzz_concurrency == DEFAULT_FUZZ_CONCURRENCY
+
+    aggressive_plugin = WebVulnerabilitiesPlugin()
+    aggressive_plugin.scan(
+        {"url": "https://example.test/?p=safe", "depth": 0, "aggressive": True}, Handler())
+    assert aggressive_plugin._fuzz_concurrency == AGGRESSIVE_FUZZ_CONCURRENCY
+    assert AGGRESSIVE_FUZZ_CONCURRENCY > DEFAULT_FUZZ_CONCURRENCY
+
+
 def test_discovered_targets_never_leave_the_origin():
     targets = discover_get_targets(
         "https://example.test/page",

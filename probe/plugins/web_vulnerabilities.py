@@ -1,5 +1,6 @@
 import ipaddress
 import json
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List
 from urllib.parse import parse_qsl, urljoin, urlparse, urlunparse
 
@@ -31,6 +32,14 @@ MAX_PARAMETERS = 6
 # SQLi 8, SSTI 5). Budget generously per parameter so every parameter is fully
 # tested; the crawler's URL cap and the rate limiter bound total scan volume.
 MAX_PROBES_PER_PARAMETER = 50
+# How many parameters are fuzzed concurrently (each still runs every CHECKS entry
+# sequentially against its own payloads). ActiveScanContext.probe()/can_probe() are
+# already lock-protected — this was built to be driven concurrently — and mutated()
+# always copies params before mutating, so no check ever touches shared state outside
+# those locks. Aggressive mode widens it, same "safe default, aggression is one flag"
+# pattern as the crawler's batch size.
+DEFAULT_FUZZ_CONCURRENCY = 4
+AGGRESSIVE_FUZZ_CONCURRENCY = 12
 CHECKS = [
     reflected_xss.check,
     xss_attribute.check,
@@ -262,6 +271,8 @@ class WebVulnerabilitiesPlugin(BasePlugin):
         self._tested = 0
         # Aggressive mode fuzzes far more parameters per page (owned/authorized targets).
         self._max_parameters = MAX_PARAMETERS * 6 if url_info.get("aggressive") else MAX_PARAMETERS
+        self._fuzz_concurrency = (
+            AGGRESSIVE_FUZZ_CONCURRENCY if url_info.get("aggressive") else DEFAULT_FUZZ_CONCURRENCY)
         origin_states: Dict = {}
 
         if is_html:
@@ -360,10 +371,29 @@ class WebVulnerabilitiesPlugin(BasePlugin):
             method=method,
             location=location,
         )
-        for parameter in params:
-            if self._tested >= self._max_parameters:
-                return False
-            self._tested += 1
+        # Decide up front, single-threaded, exactly which of this endpoint's parameters
+        # fit the remaining global budget -- avoids a race on self._tested if the
+        # parameters below are then fuzzed concurrently.
+        param_names = list(params)
+        available = self._max_parameters - self._tested
+        if available <= 0:
+            return False
+        to_test = param_names[:available]
+        self._tested += len(to_test)
+        budget_exhausted = len(to_test) < len(param_names)
+
+        def _run_parameter(parameter):
+            results = []
             for check in CHECKS:
-                findings.extend(check(context, parameter))
-        return True
+                results.extend(check(context, parameter))
+            return results
+
+        if len(to_test) <= 1:
+            for parameter in to_test:
+                findings.extend(_run_parameter(parameter))
+        else:
+            with ThreadPoolExecutor(max_workers=min(self._fuzz_concurrency, len(to_test))) as pool:
+                for result in pool.map(_run_parameter, to_test):
+                    findings.extend(result)
+
+        return not budget_exhausted
