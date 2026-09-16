@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin, urlparse, parse_qs, urlencode
 from bs4 import BeautifulSoup
 from typing import Set, List, Dict
@@ -47,6 +48,17 @@ def _same_site_netlocs(netloc: str) -> Set[str]:
     return out
 
 
+# Pages fetched per batch during the BFS crawl. This does not raise the rate the
+# target actually receives requests at — RequestHandler's rate limiter serializes
+# *dispatch* timing across every thread via a shared lock — it only lets the scanner
+# keep several requests in flight so response latency overlaps instead of stalling
+# the whole crawl serially on one round trip at a time. Aggressive mode widens it
+# further, consistent with the "safe default, aggression is one flag" pattern the
+# rest of the scanner follows (see the parameter-budget multiplier in web_vulnerabilities).
+_DEFAULT_CRAWL_CONCURRENCY = 5
+_AGGRESSIVE_CRAWL_CONCURRENCY = 20
+
+
 class Crawler:
     def __init__(self, base_url: str, max_depth: int = 3, max_urls: int = 500,
                  verbose: bool = False, render_js: bool = False, aggressive: bool = False,
@@ -66,6 +78,8 @@ class Crawler:
         # Browser traffic uses the first configured proxy (Playwright can't rotate
         # mid-context); requests-side traffic rotates the full list in RequestHandler.
         self._proxies = [p for p in (proxies or []) if p]
+        self._crawl_concurrency = (
+            _AGGRESSIVE_CRAWL_CONCURRENCY if aggressive else _DEFAULT_CRAWL_CONCURRENCY)
         
     def is_valid_url(self, url: str) -> bool:
         parsed = urlparse(url)
@@ -380,54 +394,72 @@ class Crawler:
             if _cancelled():
                 print("[*] Crawl stopped by operator.")
                 break
-            url, depth = queue.pop(0)
 
-            if url in self.visited_urls or depth > self.max_depth:
-                if self.verbose and url in self.visited_urls:
-                    print(f"[VERBOSE] Skipping already visited: {url}")
+            # Pull a batch off the front of the queue (still FIFO/BFS-ish order) so
+            # their round trips overlap instead of running one at a time. Skips and
+            # visited-marks happen up front, exactly like the old single-item pop,
+            # so a URL can never be dispatched twice even across concurrent batches.
+            batch: List[tuple] = []
+            while (queue and len(batch) < self._crawl_concurrency
+                   and len(self.visited_urls) + len(batch) < self.max_urls):
+                url, depth = queue.pop(0)
+                if url in self.visited_urls or depth > self.max_depth:
+                    if self.verbose and url in self.visited_urls:
+                        print(f"[VERBOSE] Skipping already visited: {url}")
+                    continue
+                self.visited_urls.add(url)
+                batch.append((url, depth))
+
+            if not batch:
                 continue
 
-            print(f"[*] Crawling: {url} (depth: {depth})")
-            self.visited_urls.add(url)
+            for url, _depth in batch:
+                print(f"[*] Crawling: {url} (depth: {_depth})")
 
-            parsed = urlparse(url)
-            params = parse_qs(parsed.query)
-
-            url_info = {
-                'url': url,
-                'params': params,
-                'depth': depth,
-                # Signals the active plugin to also drive a headless browser and fuzz
-                # the real fetch/XHR the app makes (entry point only).
-                'render_js': self.render_js,
-                'aggressive': self.aggressive,
-                'scan_ports': self.scan_ports,
-            }
-            self.urls_to_scan.append(url_info)
-
-            response = request_handler.get(url)
-            url_info['response'] = response
-            if response is not None and response.status_code == 200:
-                content_type = response.headers.get('Content-Type', '')
-                if self.verbose:
-                    print(f"[VERBOSE] Response: {response.status_code}, Content-Type: {content_type}")
-                if 'text/html' in content_type:
-                    new_links = self.extract_links(response.text, url)
-                    if self.render_js:
-                        new_links = list(set(new_links) | set(self._render_links(url)))
-                    if self.verbose:
-                        print(f"[VERBOSE] Found {len(new_links)} new links on {url}")
-                        for link in new_links[:5]:
-                            print(f"[VERBOSE]   - {link}")
-                        if len(new_links) > 5:
-                            print(f"[VERBOSE]   ... and {len(new_links) - 5} more")
-                    for link in new_links:
-                        if link not in self.visited_urls:
-                            queue.append((link, depth + 1))
+            if len(batch) == 1:
+                responses = [request_handler.get(batch[0][0])]
             else:
-                if self.verbose:
-                    status = response.status_code if response else "No response"
-                    print(f"[VERBOSE] Bad response from {url}: {status}")
+                with ThreadPoolExecutor(max_workers=len(batch)) as pool:
+                    responses = list(pool.map(lambda item: request_handler.get(item[0]), batch))
+
+            for (url, depth), response in zip(batch, responses):
+                parsed = urlparse(url)
+                params = parse_qs(parsed.query)
+
+                url_info = {
+                    'url': url,
+                    'params': params,
+                    'depth': depth,
+                    # Signals the active plugin to also drive a headless browser and fuzz
+                    # the real fetch/XHR the app makes (entry point only).
+                    'render_js': self.render_js,
+                    'aggressive': self.aggressive,
+                    'scan_ports': self.scan_ports,
+                    'response': response,
+                }
+                self.urls_to_scan.append(url_info)
+
+                if response is not None and response.status_code == 200:
+                    content_type = response.headers.get('Content-Type', '')
+                    if self.verbose:
+                        print(f"[VERBOSE] Response: {response.status_code}, Content-Type: {content_type}")
+                    if 'text/html' in content_type:
+                        new_links = self.extract_links(response.text, url)
+                        if self.render_js:
+                            new_links = list(set(new_links) | set(self._render_links(url)))
+                        if self.verbose:
+                            print(f"[VERBOSE] Found {len(new_links)} new links on {url}")
+                            for link in new_links[:5]:
+                                print(f"[VERBOSE]   - {link}")
+                            if len(new_links) > 5:
+                                print(f"[VERBOSE]   ... and {len(new_links) - 5} more")
+                        for link in new_links:
+                            if link not in self.visited_urls:
+                                queue.append((link, depth + 1))
+                else:
+                    if self.verbose:
+                        status = response.status_code if response else "No response"
+                        print(f"[VERBOSE] Bad response from {url}: {status}")
 
         # One browser-driven pass at the entry point: interact like a user, capture
         # the real fetch/XHR, then (a) queue the captured API endpoints so every plugin
