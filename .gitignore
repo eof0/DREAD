@@ -73,6 +73,7 @@ probe/data/cve_db.sqlite
 
 # Rust build output
 probe/engines/rust/probe_engine/target/
+probe/scanner/engines/http/rust/target/
 
 # Scan run artifacts (now default under ~/.dread/runs)
 runs/

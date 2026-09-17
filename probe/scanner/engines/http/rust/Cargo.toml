@@ -1,0 +1,18 @@
+[package]
+name = "dread-http-fetch-rs"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "http-fetch-rs"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "time"] }
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+futures = "0.3"
+
+[profile.release]
+opt-level = 2
