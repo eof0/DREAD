@@ -48,6 +48,57 @@ def _same_site_netlocs(netloc: str) -> Set[str]:
     return out
 
 
+class CrawlTrapDetector:
+    """Flags URLs that look like infinite/near-infinite spaces — calendars, session
+    IDs, sort-order loops, deeply repeated path segments — so the crawl doesn't burn
+    its whole max_urls budget on one such trap instead of the site's real content.
+    """
+
+    _TRAP_PATTERNS = [re.compile(p, re.IGNORECASE) for p in (
+        r'/\d{4}/\d{2}/\d{2}/.*\d{4}/\d{2}/\d{2}/',   # nested dates (calendar drill-down)
+        r'/calendar.*\?.*date=.*\d{4}-\d{2}-\d{2}',
+        r'/(.+?)/\1/\1/',                              # repeated directory names
+        r'[?&]session\[?id\]?=[\w]+',
+        r'[?&]sid=[\w]+',
+        r'[?&]jsessionid=[\w]+',
+        r'\?[^&]*&[^&]*&[^&]*&[^&]*&[^&]*&',           # 6+ query parameters
+        r'/admin/login\.php.*redirect=.*redirect=',
+        r'/index\.php.*page=.*page=',
+        r'[?&]sort=.*&.*sort=',
+        r'[?&]order=.*&.*order=',
+    )]
+
+    def __init__(self, max_url_length: int = 200, pattern_repeat_limit: int = 10):
+        self.max_url_length = max_url_length
+        self._pattern_repeat_limit = pattern_repeat_limit
+        self._pattern_counts: Dict[str, int] = {}
+
+    def is_trap(self, url: str) -> bool:
+        if len(url) > self.max_url_length:
+            return True
+        if any(pattern.search(url) for pattern in self._TRAP_PATTERNS):
+            return True
+        if self._has_repeating_segment(url):
+            return True
+        pattern = self._generalize(url)
+        self._pattern_counts[pattern] = self._pattern_counts.get(pattern, 0) + 1
+        return self._pattern_counts[pattern] > self._pattern_repeat_limit
+
+    @staticmethod
+    def _has_repeating_segment(url: str, threshold: int = 3) -> bool:
+        segments = urlparse(url).path.split("/")
+        return any(len(seg) > 3 and segments.count(seg) > threshold for seg in segments)
+
+    @staticmethod
+    def _generalize(url: str) -> str:
+        """Collapse numeric ids/pages so many distinct-but-similar URLs (article/1,
+        article/2, ...) count as one pattern against the repeat limit."""
+        pattern = re.sub(r'/\d+', '/{id}', url)
+        pattern = re.sub(r'([?&]id=)\d+', r'\1{id}', pattern)
+        pattern = re.sub(r'([?&]page=)\d+', r'\1{n}', pattern)
+        return pattern
+
+
 # Pages fetched per batch during the BFS crawl. This does not raise the rate the
 # target actually receives requests at — RequestHandler's rate limiter serializes
 # *dispatch* timing across every thread via a shared lock — it only lets the scanner
@@ -80,7 +131,8 @@ class Crawler:
         self._proxies = [p for p in (proxies or []) if p]
         self._crawl_concurrency = (
             _AGGRESSIVE_CRAWL_CONCURRENCY if aggressive else _DEFAULT_CRAWL_CONCURRENCY)
-        
+        self._trap_detector = CrawlTrapDetector()
+
     def is_valid_url(self, url: str) -> bool:
         parsed = urlparse(url)
         if parsed.netloc not in self._allowed_netlocs:
@@ -406,6 +458,10 @@ class Crawler:
                 if url in self.visited_urls or depth > self.max_depth:
                     if self.verbose and url in self.visited_urls:
                         print(f"[VERBOSE] Skipping already visited: {url}")
+                    continue
+                if self._trap_detector.is_trap(url):
+                    if self.verbose:
+                        print(f"[VERBOSE] Skipping likely crawler trap: {url}")
                     continue
                 self.visited_urls.add(url)
                 batch.append((url, depth))
