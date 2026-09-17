@@ -98,6 +98,72 @@ def test_probe_script_is_present_and_does_not_include_a_payload():
     assert "WebSockets are disabled" in DOM_PROBE_SCRIPT
 
 
+def _chromium_or_skip():
+    pytest.importorskip("playwright")
+    from playwright.sync_api import sync_playwright
+
+    try:
+        with sync_playwright() as playwright:
+            playwright.chromium.launch(headless=True).close()
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"Chromium unavailable: {exc}")
+
+
+def _serve_plain_page() -> HTTPServer:
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = b"<html><body>hi</body></html>"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def test_multiple_scan_dom_calls_reuse_the_same_browser_process():
+    _chromium_or_skip()
+    import scanner.active_checks.dom_xss as dom_xss
+
+    server = _serve_plain_page()
+    try:
+        scan_dom(f"http://127.0.0.1:{server.server_port}/a")
+        first_browser = dom_xss._shared_browser
+        assert first_browser is not None
+
+        scan_dom(f"http://127.0.0.1:{server.server_port}/b")
+        second_browser = dom_xss._shared_browser
+
+        assert second_browser is first_browser   # no relaunch between calls
+    finally:
+        server.shutdown()
+
+
+def test_concurrent_scan_dom_calls_are_serialized_without_crashing():
+    # Playwright's sync API is not safe to touch from multiple threads at once --
+    # this proves the dedicated-thread fix holds up under real concurrent pressure
+    # (matching engine.py's ThreadPoolExecutor driving several (url, plugin) tasks
+    # at the same time), not just that a single call still works.
+    _chromium_or_skip()
+    from concurrent.futures import ThreadPoolExecutor
+
+    server = _serve_plain_page()
+    try:
+        urls = [f"http://127.0.0.1:{server.server_port}/{i}" for i in range(5)]
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            results = list(pool.map(scan_dom, urls))
+        assert len(results) == 5
+        assert all(isinstance(r, list) for r in results)   # every call completed cleanly
+    finally:
+        server.shutdown()
+
+
 def _missing_playwright_import(name, *args, **kwargs):
     if name.startswith("playwright"):
         raise ImportError("playwright unavailable")

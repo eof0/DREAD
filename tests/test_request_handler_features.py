@@ -108,6 +108,60 @@ def test_success_resets_failure_count(monkeypatch):
     assert not h.is_host_down("host.test")       # never reached 3 consecutive
 
 
+def test_persistent_429_trips_the_circuit_breaker(monkeypatch):
+    # A WAF/rate-limiter blocking by status code never raises -- urllib3 hands back a
+    # completed (if retried) response. Without treating this as a failure, the breaker
+    # would never trip and every remaining probe would eat a full retry-with-backoff.
+    h = RequestHandler(rate_limit=0, max_host_failures=3)
+    calls = []
+
+    def blocked(m, u, **k):
+        calls.append(u)
+        return _FakeResp(status=429)
+
+    monkeypatch.setattr(h.session, "request", blocked)
+
+    for _ in range(6):
+        h.get("http://blocked.test/", no_cache=True)
+    assert len(calls) == 3            # stops after 3 blocked responses; rest short-circuit
+    assert h.is_host_down("blocked.test")
+
+
+def test_persistent_503_also_trips_the_circuit_breaker(monkeypatch):
+    h = RequestHandler(rate_limit=0, max_host_failures=2)
+    monkeypatch.setattr(h.session, "request", lambda m, u, **k: _FakeResp(status=503))
+
+    for _ in range(4):
+        h.get("http://overloaded.test/", no_cache=True)
+    assert h.is_host_down("overloaded.test")
+
+
+def test_occasional_429_amid_successes_never_trips_the_breaker(monkeypatch):
+    # Consecutive-only semantics: a rate limiter that occasionally 429s but mostly
+    # succeeds isn't "blocking" -- each 200 resets the counter, same as a real success
+    # already does for connection failures.
+    statuses = iter([429, 200, 429, 200, 429, 200, 429, 200])
+    h = RequestHandler(rate_limit=0, max_host_failures=3)
+    monkeypatch.setattr(h.session, "request",
+                        lambda m, u, **k: _FakeResp(status=next(statuses)))
+
+    for _ in range(8):
+        h.get("http://flaky.test/", no_cache=True)
+    assert not h.is_host_down("flaky.test")
+
+
+def test_blocked_status_response_is_still_returned_to_the_caller(monkeypatch):
+    # A 429/503 is still a real response a plugin might want to inspect (e.g. to
+    # report the rate limiting itself) -- only the *breaker bookkeeping* changes,
+    # the response is never swallowed on a single occurrence.
+    h = RequestHandler(rate_limit=0, max_host_failures=5)
+    monkeypatch.setattr(h.session, "request", lambda m, u, **k: _FakeResp(status=429))
+
+    response = h.get("http://x.test/", no_cache=True)
+    assert response is not None
+    assert response.status_code == 429
+
+
 # --- proxy rotation -------------------------------------------------------------------
 
 def test_proxies_rotate_round_robin(monkeypatch):

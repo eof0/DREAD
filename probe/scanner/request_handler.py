@@ -18,6 +18,16 @@ from typing import Dict, List, Optional, Tuple
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+# Statuses that mean "this host is refusing/failing every request" as surely as a
+# dropped connection does: a WAF/rate-limiter blocking by status code (429/503) or a
+# backend that's fallen over under scan load (502/504). urllib3 already retries these
+# internally (see Retry(status_forcelist=...) below) before handing back a final
+# response, so seeing one HERE means it was still failing after retries -- a real
+# signal, not a blip. Feeds the circuit breaker the same as a connection failure does,
+# so a target that starts blocking mid-scan gets detected and skipped instead of
+# eating a full retry-with-backoff cycle on every remaining probe.
+_BLOCKED_STATUS_CODES = frozenset({429, 502, 503, 504})
+
 
 # Header names that must never survive a redirect to a different host, on top of
 # any operator-supplied ``-H`` headers (which may themselves be API keys).
@@ -163,7 +173,7 @@ class RequestHandler:
             total=max_retries,
             connect=1,
             backoff_factor=backoff_factor,
-            status_forcelist=[429, 502, 503, 504],
+            status_forcelist=list(_BLOCKED_STATUS_CODES),
             allowed_methods=["HEAD", "GET", "OPTIONS", "POST"],
             raise_on_status=False,
         )
@@ -302,8 +312,8 @@ class RequestHandler:
             if newly_down:
                 self._down_hosts.add(host)
         if newly_down:
-            print(f"[!] {host} appears offline after {count} failed requests — "
-                  "skipping further scanning of this host.")
+            print(f"[!] {host} appears offline or is blocking requests after {count} "
+                  "failed/blocked responses — skipping further scanning of this host.")
 
     def _record_success(self, host: str) -> None:
         if host and self._host_failures.get(host):
@@ -368,7 +378,10 @@ class RequestHandler:
                 if response.headers.get('Server'):
                     print(f"[VERBOSE]   Server: {response.headers.get('Server')}")
 
-            self._record_success(host)
+            if response.status_code in _BLOCKED_STATUS_CODES:
+                self._record_failure(host)
+            else:
+                self._record_success(host)
             if cache_key is not None:
                 with self._cache_lock:
                     if len(self._cache) < self._cache_max:
