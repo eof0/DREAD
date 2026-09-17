@@ -13,6 +13,11 @@ from __future__ import annotations
 
 from typing import Callable, Dict, List, Optional
 
+try:
+    from discovery.dns_utils import resolve_cname as _resolve_cname_dns
+except ImportError:  # pragma: no cover - exercised depending on which sys.path root is set up
+    from scope.discovery.dns_utils import resolve_cname as _resolve_cname_dns
+
 # CNAME suffix -> service + the body fingerprint a service shows for an unclaimed name.
 # Curated from the widely-used can-i-take-over-xyz corpus; extend as needed.
 FINGERPRINTS: tuple[dict, ...] = (
@@ -53,19 +58,6 @@ def is_vulnerable(fingerprint: Optional[dict], body: str) -> bool:
     if not fingerprint:
         return False
     return fingerprint["fingerprint"].lower() in (body or "").lower()
-
-
-def _resolve_cname_dns(host: str) -> Optional[str]:
-    """Best-effort CNAME lookup using dnspython if present, else None."""
-    try:
-        import dns.resolver  # type: ignore
-
-        answers = dns.resolver.resolve(host, "CNAME")
-        for rdata in answers:
-            return str(rdata.target).rstrip(".")
-    except Exception:
-        return None
-    return None
 
 
 def _fetch_body(host: str, timeout: int = 8) -> str:

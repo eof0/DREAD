@@ -7,7 +7,18 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Optional, Set, Tuple
 import requests
 
+try:
+    from discovery.dns_utils import resolve_cname
+except ImportError:  # pragma: no cover - exercised depending on which sys.path root is set up
+    from scope.discovery.dns_utils import resolve_cname
+
 PROBE_WORKERS = 10
+
+# CloudFront distributions have no guessable bucket-style name (unlike S3/GCS), so the
+# only passive signal is a CNAME pointing at *.cloudfront.net. Check the bare domain
+# plus the handful of hostnames orgs commonly point at a CDN.
+CLOUDFRONT_CNAME_SUFFIX = ".cloudfront.net"
+CLOUDFRONT_CANDIDATE_PREFIXES = ("", "www.", "cdn.", "static.", "assets.", "media.", "images.")
 
 
 class CloudDiscovery:
@@ -76,15 +87,20 @@ class CloudDiscovery:
 
         return [found_by_bucket[bucket] for bucket in patterns if bucket in found_by_bucket]
     
+    def _probe_cloudfront_candidate(self, host: str) -> Optional[Dict]:
+        cname = resolve_cname(host)
+        if cname and cname.lower().rstrip(".").endswith(CLOUDFRONT_CNAME_SUFFIX):
+            return {"hostname": host, "cname": cname}
+        return None
+
     def _find_cloudfront(self, domain: str) -> List[Dict]:
-        """Find CloudFront distributions."""
-        found = []
-        
-        # Common CloudFront patterns in DNS
-        # Would need DNS lookup integration for real implementation
-        # This is a placeholder
-        
-        return found
+        """Find CloudFront distributions fronting this domain or a common CDN alias."""
+        candidates = [f"{prefix}{domain}" for prefix in CLOUDFRONT_CANDIDATE_PREFIXES]
+
+        with ThreadPoolExecutor(max_workers=PROBE_WORKERS) as pool:
+            results = list(pool.map(self._probe_cloudfront_candidate, candidates))
+
+        return [r for r in results if r is not None]
     
     def _probe_azure_blob(self, account: str) -> Optional[Dict]:
         url = f"https://{account}.blob.core.windows.net"

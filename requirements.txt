@@ -39,3 +39,9 @@ pyyaml>=6.0
 # Additional utilities
 urllib3>=1.26.0
 certifi>=2022.0.0
+
+# DNS lookups: subdomain-takeover CNAME checks (scope/discovery/takeover.py),
+# CloudFront/CDN CNAME detection (scope/discovery/cloud_assets.py), and ASN
+# resolution (probe/plugins/infrastructure_intel.py) all degrade to a silent
+# no-op without this — best-effort by design, but should actually run by default.
+dnspython>=2.4.0

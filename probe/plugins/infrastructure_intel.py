@@ -15,6 +15,32 @@ from plugins.base_plugin import BasePlugin, Finding
 
 from scanner.paths import ASN_DB_PATH
 
+
+def _cymru_txt_query(query: str) -> Optional[str]:
+    """Raw DNS TXT lookup against Team Cymru's IP-to-ASN service. Best-effort: any
+    failure (no dnspython, no network, NXDOMAIN) returns None rather than raising."""
+    try:
+        import dns.resolver  # type: ignore
+
+        answers = dns.resolver.resolve(query, "TXT")
+        for rdata in answers:
+            strings = getattr(rdata, "strings", None)
+            if strings:
+                return b"".join(strings).decode(errors="replace")
+            return str(rdata).strip('"')
+    except Exception:
+        return None
+    return None
+
+
+def _parse_cymru_asn(txt: str) -> Optional[str]:
+    """Team Cymru's origin.asn.cymru.com answer is
+    "ASN | BGP Prefix | Country | Registry | Allocated" -- pull just the ASN field."""
+    if not txt:
+        return None
+    asn = txt.split("|", 1)[0].strip()
+    return asn if asn.isdigit() else None
+
 # Cloud provider ASN ranges (simplified)
 CLOUD_PROVIDERS = {
     "Cloudflare": {
@@ -84,13 +110,25 @@ class InfrastructureIntelPlugin(BasePlugin):
     
     def _lookup_asn(self, ip: str, asn_db: Dict) -> Optional[Dict]:
         """
-        Lookup ASN for IP address.
-        
-        Note: This is a simplified implementation.
-        Real implementation would need IP-to-ASN mapping.
+        Resolve an IP to its announcing ASN via Team Cymru's DNS-based IP-to-ASN
+        service (live: BGP announcements change constantly, so a bundled snapshot
+        can't answer "who announces this IP" the way ``asn_db`` can already answer
+        "what do we know about ASN N"), then enrich with the locally maintained
+        registry-allocation metadata (country/RIR/status/allocated date) for that
+        ASN, when we have it.
         """
-        # Placeholder - would need proper IP-to-ASN database
-        return None
+        octets = ip.split(".")
+        if len(octets) != 4 or not all(o.isdigit() for o in octets):
+            return None   # IPv6 / malformed -- Cymru's origin service here is v4-only
+        query = ".".join(reversed(octets)) + ".origin.asn.cymru.com"
+        asn = _parse_cymru_asn(_cymru_txt_query(query) or "")
+        if asn is None:
+            return None
+        entry: Dict = {"asn": asn}
+        meta = asn_db.get("asns", {}).get(asn)
+        if meta:
+            entry.update(meta)
+        return entry
     
     def _detect_cloud_provider(self, headers: Dict) -> Optional[str]:
         """Detect cloud/CDN provider from HTTP headers."""
@@ -137,16 +175,20 @@ class InfrastructureIntelPlugin(BasePlugin):
         # Detect cloud provider
         cloud_provider = self._detect_cloud_provider(headers)
         
-        # Load ASN database
+        # Load ASN database and resolve this IP's announcing ASN
         asn_db = self._load_asn_db()
-        
+        asn_info = self._lookup_asn(ip, asn_db)
+
         # Build infrastructure info
         infra_info = {
             "hostname": hostname,
             "ip": ip,
             "reverse_dns": self._reverse_dns(ip),
         }
-        
+
+        if asn_info:
+            infra_info["asn"] = asn_info
+
         if cloud_provider:
             infra_info["cloud_provider"] = cloud_provider
         

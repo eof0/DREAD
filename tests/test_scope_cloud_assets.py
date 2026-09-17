@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from scope.discovery import cloud_assets
 from scope.discovery.cloud_assets import CloudDiscovery
 
 
@@ -46,3 +47,32 @@ def test_scan_aggregates_all_four_categories(monkeypatch) -> None:
         "azure_blob": [{"account": "a"}],
         "gcs": [],
     }
+
+
+def test_find_cloudfront_flags_a_cname_pointed_at_cloudfront(monkeypatch) -> None:
+    cd = CloudDiscovery()
+
+    def fake_resolve(host: str):
+        if host == "cdn.example.com":
+            return "d111111abcdef8.cloudfront.net"
+        return None
+
+    monkeypatch.setattr(cloud_assets, "resolve_cname", fake_resolve)
+
+    found = cd._find_cloudfront("example.com")
+    assert found == [{"hostname": "cdn.example.com", "cname": "d111111abcdef8.cloudfront.net"}]
+
+
+def test_find_cloudfront_ignores_cnames_to_other_services(monkeypatch) -> None:
+    cd = CloudDiscovery()
+    monkeypatch.setattr(cloud_assets, "resolve_cname",
+                        lambda host: "somewhere.fastly.net" if host == "example.com" else None)
+
+    assert cd._find_cloudfront("example.com") == []
+
+
+def test_find_cloudfront_returns_empty_when_nothing_resolves(monkeypatch) -> None:
+    cd = CloudDiscovery()
+    monkeypatch.setattr(cloud_assets, "resolve_cname", lambda host: None)
+
+    assert cd._find_cloudfront("example.com") == []
