@@ -12,6 +12,7 @@ _PROBE = Path(__file__).resolve().parents[1] / "probe"
 if str(_PROBE) not in sys.path:
     sys.path.insert(0, str(_PROBE))
 
+import scanner.request_handler as request_handler_module
 from scanner.request_handler import RequestHandler
 
 
@@ -160,6 +161,94 @@ def test_blocked_status_response_is_still_returned_to_the_caller(monkeypatch):
     response = h.get("http://x.test/", no_cache=True)
     assert response is not None
     assert response.status_code == 429
+
+
+class _FakeClock:
+    """A controllable time.time() so recovery-cooldown tests don't need to sleep."""
+
+    def __init__(self, start=1000.0):
+        self.now = start
+
+    def time(self):
+        return self.now
+
+    def sleep(self, _seconds):
+        pass   # rate_limit=0 in these tests means this is never actually hit
+
+
+def test_down_host_recovers_after_cooldown_elapses(monkeypatch):
+    clock = _FakeClock()
+    monkeypatch.setattr(request_handler_module, "time", clock)
+    h = RequestHandler(rate_limit=0, max_host_failures=2, recovery_cooldown=30)
+
+    def boom(m, u, **k):
+        raise requests.exceptions.ConnectionError("down")
+
+    monkeypatch.setattr(h.session, "request", boom)
+    h.get("http://x.test/", no_cache=True)
+    h.get("http://x.test/", no_cache=True)
+    assert h.is_host_down("x.test")
+
+    clock.now += 31   # cooldown elapsed
+    monkeypatch.setattr(h.session, "request", lambda m, u, **k: _FakeResp(status=200))
+    response = h.get("http://x.test/", no_cache=True)
+
+    assert response is not None            # the recovery probe went through
+    assert not h.is_host_down("x.test")    # and cleared the down status
+
+
+def test_down_host_stays_blocked_before_cooldown_elapses(monkeypatch):
+    clock = _FakeClock()
+    monkeypatch.setattr(request_handler_module, "time", clock)
+    h = RequestHandler(rate_limit=0, max_host_failures=2, recovery_cooldown=30)
+    calls = []
+
+    def boom(m, u, **k):
+        calls.append(u)
+        raise requests.exceptions.ConnectionError("down")
+
+    monkeypatch.setattr(h.session, "request", boom)
+    h.get("http://x.test/", no_cache=True)
+    h.get("http://x.test/", no_cache=True)
+    assert len(calls) == 2
+
+    clock.now += 5   # well under the 30s cooldown
+    assert h.get("http://x.test/", no_cache=True) is None
+    assert len(calls) == 2                 # short-circuited, no network call made
+    assert h.is_host_down("x.test")
+
+
+def test_failed_recovery_probe_resets_the_cooldown_clock(monkeypatch):
+    clock = _FakeClock()
+    monkeypatch.setattr(request_handler_module, "time", clock)
+    h = RequestHandler(rate_limit=0, max_host_failures=2, recovery_cooldown=30)
+
+    def boom(m, u, **k):
+        raise requests.exceptions.ConnectionError("down")
+
+    monkeypatch.setattr(h.session, "request", boom)
+    h.get("http://x.test/", no_cache=True)
+    h.get("http://x.test/", no_cache=True)
+
+    clock.now += 31
+    assert h.get("http://x.test/", no_cache=True) is None   # recovery probe fails too
+    assert h.is_host_down("x.test")
+
+    clock.now += 5   # short of a fresh 30s window from the failed probe
+    assert h.get("http://x.test/", no_cache=True) is None
+    assert h.is_host_down("x.test")
+
+
+def test_concurrent_recovery_attempts_claim_only_one_probe(monkeypatch):
+    clock = _FakeClock()
+    monkeypatch.setattr(request_handler_module, "time", clock)
+    h = RequestHandler(rate_limit=0, max_host_failures=1, recovery_cooldown=30)
+    h._down_hosts.add("x.test")
+    h._down_since["x.test"] = clock.now
+    clock.now += 31
+
+    assert h._claim_recovery_probe("x.test") is True    # first caller claims it
+    assert h._claim_recovery_probe("x.test") is False   # a concurrent caller does not
 
 
 # --- proxy rotation -------------------------------------------------------------------

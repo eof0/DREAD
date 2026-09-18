@@ -1,3 +1,5 @@
+import sys
+import types
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
 from urllib.parse import parse_qs, urlparse
@@ -6,6 +8,7 @@ import pytest
 
 _ORIGINAL_IMPORT = __import__
 
+import scanner.active_checks.dom_xss as dom_xss
 from scanner.active_checks.dom_xss import (
     DOM_PROBE_SCRIPT,
     build_probe_url,
@@ -13,6 +16,180 @@ from scanner.active_checks.dom_xss import (
     is_allowed_browser_request,
     scan_dom,
 )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_shared_browser_state():
+    """dom_xss's shared browser/executor are module-level globals -- save and
+    restore them around every test so the fake-object tests below can't leak
+    state into the real-Chromium integration tests elsewhere in this file."""
+    saved = (dom_xss._browser_executor, dom_xss._shared_browser, dom_xss._shared_playwright)
+    yield
+    dom_xss._browser_executor, dom_xss._shared_browser, dom_xss._shared_playwright = saved
+
+
+class _FakeBrowser:
+    def __init__(self, connected=True):
+        self._connected = connected
+        self.close_calls = 0
+
+    def is_connected(self):
+        return self._connected
+
+    def close(self):
+        self.close_calls += 1
+        self._connected = False
+
+
+class _FakePlaywrightInstance:
+    def __init__(self, browser_factory, launch_error=None):
+        self._browser_factory = browser_factory
+        self._launch_error = launch_error
+        self.stop_calls = 0
+        self.chromium = types.SimpleNamespace(launch=self._launch)
+
+    def _launch(self, headless=True):
+        if self._launch_error is not None:
+            raise self._launch_error
+        return self._browser_factory()
+
+    def stop(self):
+        self.stop_calls += 1
+
+
+def _install_fake_playwright(monkeypatch, browser_factory, launch_error=None):
+    """Makes the deferred `from playwright.sync_api import sync_playwright` inside
+    dom_xss resolve to a fake, so these tests exercise the real control flow
+    (liveness check, relaunch, cleanup ordering) without a real browser."""
+    instances = []
+
+    def fake_sync_playwright():
+        instance = _FakePlaywrightInstance(browser_factory, launch_error)
+        instances.append(instance)
+        return types.SimpleNamespace(start=lambda: instance)
+
+    fake_module = types.SimpleNamespace(sync_playwright=fake_sync_playwright)
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", fake_module)
+    return instances
+
+
+# -- shared-browser resilience: liveness, leak-free launch failure, poisoned-worker
+# -- recovery, and atexit cleanup that doesn't route through the executor -----------
+
+def test_ensure_shared_browser_reuses_a_live_browser():
+    live = _FakeBrowser(connected=True)
+    dom_xss._shared_browser = live
+    dom_xss._shared_playwright = _FakePlaywrightInstance(lambda: live)
+
+    assert dom_xss._ensure_shared_browser() is live   # no playwright import needed
+
+
+def test_ensure_shared_browser_relaunches_a_dead_browser(monkeypatch):
+    dead = _FakeBrowser(connected=False)
+    old_playwright = _FakePlaywrightInstance(lambda: dead)
+    dom_xss._shared_browser = dead
+    dom_xss._shared_playwright = old_playwright
+
+    fresh = _FakeBrowser(connected=True)
+    _install_fake_playwright(monkeypatch, browser_factory=lambda: fresh)
+
+    result = dom_xss._ensure_shared_browser()
+
+    assert result is fresh
+    assert dead.close_calls == 1          # dead browser was torn down
+    assert old_playwright.stop_calls == 1  # its driver was stopped too
+
+
+def test_ensure_shared_browser_stops_the_driver_when_launch_fails(monkeypatch):
+    dom_xss._shared_browser = None
+    dom_xss._shared_playwright = None
+    instances = _install_fake_playwright(monkeypatch, browser_factory=lambda: None,
+                                          launch_error=RuntimeError("no chromium binary"))
+
+    with pytest.raises(RuntimeError):
+        dom_xss._ensure_shared_browser()
+
+    assert len(instances) == 1
+    assert instances[0].stop_calls == 1    # driver stopped, not leaked
+    assert dom_xss._shared_playwright is None
+
+
+class _FakeExecutor:
+    def __init__(self):
+        self.shutdown_calls = 0
+
+    def submit(self, *_args, **_kwargs):
+        # Matches the real concurrent.futures failure mode at interpreter exit.
+        raise RuntimeError("cannot schedule new futures after interpreter shutdown")
+
+    def shutdown(self, wait=False):
+        self.shutdown_calls += 1
+
+
+def test_shutdown_shared_browser_closes_directly_not_through_executor_submit():
+    fake_executor = _FakeExecutor()
+    browser = _FakeBrowser(connected=True)
+    dom_xss._browser_executor = fake_executor
+    dom_xss._shared_browser = browser
+    dom_xss._shared_playwright = _FakePlaywrightInstance(lambda: browser)
+
+    dom_xss._shutdown_shared_browser()   # must not raise, even though .submit() would
+
+    assert browser.close_calls == 1
+    assert fake_executor.shutdown_calls == 1
+    assert dom_xss._browser_executor is None
+
+
+def test_shutdown_shared_browser_is_a_noop_with_no_executor():
+    dom_xss._browser_executor = None
+    dom_xss._shutdown_shared_browser()   # must not raise
+
+
+def test_replace_poisoned_executor_drops_stale_browser_state():
+    poisoned = object()
+    dom_xss._browser_executor = poisoned
+    dom_xss._shared_browser = _FakeBrowser()
+    dom_xss._shared_playwright = _FakePlaywrightInstance(lambda: None)
+
+    dom_xss._replace_poisoned_executor(poisoned)
+
+    assert dom_xss._browser_executor is None
+    assert dom_xss._shared_browser is None
+    assert dom_xss._shared_playwright is None
+
+
+def test_replace_poisoned_executor_ignores_an_already_replaced_executor():
+    # If a fresh executor was already created (e.g. by another call) by the time
+    # this fires, it must not tear down the new one.
+    old_executor = object()
+    new_executor = object()
+    dom_xss._browser_executor = new_executor
+
+    dom_xss._replace_poisoned_executor(old_executor)
+
+    assert dom_xss._browser_executor is new_executor   # untouched
+
+
+class _FakeTimeoutFuture:
+    def result(self, timeout=None):
+        raise dom_xss.FuturesTimeoutError()
+
+
+class _FakeSubmitOnlyExecutor:
+    def submit(self, _fn, *_args, **_kwargs):
+        return _FakeTimeoutFuture()
+
+
+def test_scan_dom_replaces_the_executor_when_a_check_times_out(monkeypatch):
+    fake_executor = _FakeSubmitOnlyExecutor()
+    monkeypatch.setattr(dom_xss, "_get_browser_executor", lambda: fake_executor)
+    replaced_with = []
+    monkeypatch.setattr(dom_xss, "_replace_poisoned_executor", lambda ex: replaced_with.append(ex))
+
+    result = scan_dom("https://example.test/")
+
+    assert result == []
+    assert replaced_with == [fake_executor]
 
 
 def test_probe_url_preserves_target_origin_and_adds_query_and_fragment_canaries():
@@ -53,6 +230,12 @@ def test_dom_event_becomes_redacted_finding():
 
 
 def test_scan_dom_skips_when_playwright_is_unavailable(monkeypatch):
+    # Force a clean slate: _ensure_shared_browser() reuses a live browser without
+    # re-importing, so a browser left over from an earlier test would make this
+    # pass vacuously (via the generic except-Exception fallback) instead of
+    # actually exercising the ImportError path this test claims to cover.
+    dom_xss._shared_browser = None
+    dom_xss._shared_playwright = None
     monkeypatch.setattr("builtins.__import__", _missing_playwright_import)
     assert scan_dom("https://example.test/") == []
 

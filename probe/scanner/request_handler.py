@@ -106,6 +106,7 @@ class RequestHandler:
         proxies: Optional[List[str]] = None,
         max_host_failures: int = 4,
         cache_enabled: bool = True,
+        recovery_cooldown: float = 30.0,
     ):
         """
         Initialize request handler.
@@ -138,11 +139,22 @@ class RequestHandler:
         self._proxy_lock = threading.Lock()
 
         # Dead-host circuit breaker: after this many consecutive connect/DNS/timeout
-        # failures for a host, mark it down and stop scanning it (no point testing an
-        # offline subdomain). A success resets the host's counter.
+        # failures (or persistent 429/502/503/504 responses) for a host, mark it down
+        # and stop scanning it (no point hammering an offline or blocking subdomain).
+        # A success resets the host's counter. A down host isn't down forever, though
+        # -- a brief rate-limit or overload blip shouldn't permanently write off a
+        # target for the rest of the scan, especially under --offensive's higher
+        # concurrency, which reaches the threshold far more easily than a genuine
+        # outage would. After _recovery_cooldown seconds, exactly one probe is let
+        # through as a recovery attempt (self._probing tracks the in-flight claim so
+        # concurrent callers don't all pile on the same host the moment it expires);
+        # success clears the down status, failure resets the cooldown clock.
         self._max_host_failures = max(1, int(max_host_failures))
         self._host_failures: Dict[str, int] = {}
         self._down_hosts: set = set()
+        self._down_since: Dict[str, float] = {}
+        self._probing: set = set()
+        self._recovery_cooldown = max(0.0, float(recovery_cooldown))
         self._failure_lock = threading.Lock()
 
         # Per-scan GET response cache — collapses the many duplicate page fetches
@@ -302,23 +314,53 @@ class RequestHandler:
         headers_key = tuple(sorted((str(k).lower(), str(v)) for k, v in headers.items()))
         return (method, url, params_key, headers_key, bool(kwargs.get("allow_redirects", True)))
 
+    def _claim_recovery_probe(self, host: str) -> bool:
+        """True if this call may retry a down host — cooldown has elapsed and no
+        other thread already owns the recovery attempt (claims it if so, so only
+        one probe goes out at a time instead of every concurrent caller piling on
+        the same host the instant its cooldown expires)."""
+        with self._failure_lock:
+            if host not in self._down_hosts:
+                return True   # raced with another thread's successful recovery
+            if host in self._probing:
+                return False  # another thread already owns this attempt
+            if time.time() - self._down_since.get(host, 0.0) < self._recovery_cooldown:
+                return False  # still cooling down
+            self._probing.add(host)
+            return True
+
     def _record_failure(self, host: str) -> None:
         if not host:
             return
         with self._failure_lock:
+            self._probing.discard(host)
             count = self._host_failures.get(host, 0) + 1
             self._host_failures[host] = count
             newly_down = count >= self._max_host_failures and host not in self._down_hosts
             if newly_down:
                 self._down_hosts.add(host)
+                self._down_since[host] = time.time()
+            elif host in self._down_hosts:
+                # A recovery probe just failed -- wait the full cooldown again
+                # before the next attempt, rather than retrying every request.
+                self._down_since[host] = time.time()
         if newly_down:
             print(f"[!] {host} appears offline or is blocking requests after {count} "
-                  "failed/blocked responses — skipping further scanning of this host.")
+                  "failed/blocked responses — skipping further scanning of this host "
+                  f"for {self._recovery_cooldown:.0f}s.")
 
     def _record_success(self, host: str) -> None:
-        if host and self._host_failures.get(host):
-            with self._failure_lock:
+        if not host:
+            return
+        with self._failure_lock:
+            self._probing.discard(host)
+            if self._host_failures.get(host):
                 self._host_failures[host] = 0
+            was_down = host in self._down_hosts
+            self._down_hosts.discard(host)
+            self._down_since.pop(host, None)
+        if was_down:
+            print(f"[+] {host} is responding again — resuming scanning of this host.")
 
     def _make_request(
         self,
@@ -336,8 +378,9 @@ class RequestHandler:
 
         host = self._host_of(url)
 
-        # Circuit breaker: never touch a host already judged down.
-        if host and host in self._down_hosts:
+        # Circuit breaker: skip a host already judged down, unless its cooldown has
+        # elapsed and this call claims the single recovery probe.
+        if host and host in self._down_hosts and not self._claim_recovery_probe(host):
             return None
 
         # Per-scan GET cache (safe: GET is idempotent). Injection GETs carry unique

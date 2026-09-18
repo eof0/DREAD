@@ -5,6 +5,7 @@ import logging
 import secrets
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -42,6 +43,23 @@ def _get_browser_executor() -> ThreadPoolExecutor:
         return _browser_executor
 
 
+def _replace_poisoned_executor(poisoned: ThreadPoolExecutor) -> None:
+    """A submitted check didn't finish within its budget -- the dedicated worker
+    thread may be permanently wedged (a hung page.evaluate()/context.close() on a
+    pathological target). Abandon that executor and the browser/driver it might
+    still be touching, and start fresh so later scan_dom() calls aren't queued
+    behind a task that will never return. The stuck thread and its browser leak
+    until the process exits; that's the acceptable cost of not risking a second
+    thread touching the same Playwright sync-API objects concurrently.
+    """
+    global _browser_executor, _shared_browser, _shared_playwright
+    with _browser_lock:
+        if _browser_executor is poisoned:
+            _browser_executor = None
+            _shared_browser = None
+            _shared_playwright = None
+
+
 def _close_shared_browser() -> None:
     """Runs ON the browser thread (via the executor) -- never call directly."""
     global _shared_browser, _shared_playwright
@@ -60,28 +78,51 @@ def _close_shared_browser() -> None:
 
 
 def _shutdown_shared_browser() -> None:
-    """Process-exit cleanup (atexit) so a lingering scan never leaks a browser."""
+    """Process-exit cleanup (atexit) so a lingering scan never leaks a browser.
+
+    Can't route this through the executor: concurrent.futures registers its own
+    shutdown via threading._register_atexit, which joins every executor's worker
+    threads before any plain atexit.register callback (this one included) runs --
+    so executor.submit() here always raises "cannot schedule new futures after
+    interpreter shutdown" (verified empirically). That join is exactly why a
+    direct call is safe despite normally being a different-thread access: by the
+    time this runs, the dedicated browser thread is already dead, so nothing else
+    can be touching these objects.
+    """
     global _browser_executor
     executor = _browser_executor
     if executor is None:
         return
-    try:
-        executor.submit(_close_shared_browser).result(timeout=5)
-    except Exception:  # noqa: BLE001 - process is exiting either way
-        pass
+    _close_shared_browser()
     executor.shutdown(wait=False)
     _browser_executor = None
 
 
 def _ensure_shared_browser():
-    """Runs ON the browser thread. Lazily launches once; reused on every later call."""
+    """Runs ON the browser thread. Lazily launches once; reused on every later
+    call, with a liveness check so a crashed/killed browser gets relaunched
+    instead of silently going dark for the rest of the process."""
     global _shared_browser, _shared_playwright
     if _shared_browser is not None:
-        return _shared_browser
+        if _shared_browser.is_connected():
+            return _shared_browser
+        _close_shared_browser()  # stale/dead -- drop it and relaunch below
+
     from playwright.sync_api import sync_playwright  # noqa: PLC0415 - optional dependency
 
     _shared_playwright = sync_playwright().start()
-    _shared_browser = _shared_playwright.chromium.launch(headless=True)
+    try:
+        _shared_browser = _shared_playwright.chromium.launch(headless=True)
+    except Exception:
+        # The driver process started but the browser itself failed to launch --
+        # stop the driver too, so a failing/retried launch doesn't leak one
+        # orphaned subprocess per attempt.
+        try:
+            _shared_playwright.stop()
+        except Exception:  # noqa: BLE001 - best-effort teardown
+            pass
+        _shared_playwright = None
+        raise
     return _shared_browser
 
 DOM_PROBE_SCRIPT = r"""
@@ -270,6 +311,15 @@ def scan_dom(url: str, timeout_ms: int = 10000) -> list[Finding]:
     future = executor.submit(_run_dom_check, url, timeout_ms)
     try:
         return future.result(timeout=timeout_ms / 1000 + 15)
+    except FuturesTimeoutError:
+        # The worker thread didn't finish in time and can't be cancelled once
+        # running -- it may be permanently wedged. Replace the executor so later
+        # calls aren't queued behind a task that will never return, instead of
+        # DOM-XSS checking silently going dark for the rest of the scan.
+        logger.warning("DOM browser check timed out for %s; resetting the shared "
+                        "browser worker for subsequent checks.", url)
+        _replace_poisoned_executor(executor)
+        return []
     except Exception as exc:  # noqa: BLE001 - never let a stuck/failed check hang the scan
         logger.debug("DOM browser check failed for %s: %s", url, exc)
         return []

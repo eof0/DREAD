@@ -234,6 +234,12 @@ class ScanEngine:
         self.config = config
         self.verbose = getattr(config, 'verbose', False)
         proxies = getattr(config, "proxies", None)
+        # Aggressive mode sends several times the request volume (wider crawl and
+        # fuzz batches), so a burst of transient 429/503s from the target's own
+        # rate limiter reaches the default failure threshold far more easily than
+        # a genuine outage would -- scale the threshold with it, same "safe
+        # default, aggression is one flag" pattern as the concurrency knobs.
+        aggressive = getattr(config, "aggressive", False)
         self.request_handler = build_handler(
             config.rate_limit,
             self.verbose,
@@ -241,6 +247,7 @@ class ScanEngine:
             cookies=getattr(config, "cookies", None),
             headers=getattr(config, "extra_headers", None),
             proxies=proxies,
+            max_host_failures=16 if aggressive else None,
         )
         secondary_auth = getattr(config, "auth_secondary", None)
         if secondary_auth:

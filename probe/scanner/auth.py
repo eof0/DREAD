@@ -55,9 +55,10 @@ def build_handler(
     headers: Optional[Dict[str, str]] = None,
     verify_ssl: bool = True,
     proxies: Optional[list] = None,
+    max_host_failures: Optional[int] = None,
 ) -> RequestHandler:
     """Build a ``RequestHandler`` and tag it with ``.authenticated`` / ``.secondary``."""
-    handler = RequestHandler(
+    handler_kwargs = dict(
         rate_limit=rate_limit,
         verbose=verbose,
         auth=auth,
@@ -66,6 +67,9 @@ def build_handler(
         verify_ssl=verify_ssl,
         proxies=proxies,
     )
+    if max_host_failures is not None:
+        handler_kwargs["max_host_failures"] = max_host_failures
+    handler = RequestHandler(**handler_kwargs)
     # Marked here so plugins can tell an authenticated session from an anonymous
     # one without inspecting the requests session internals. Only real
     # credentials or a session cookie count — arbitrary ``-H`` headers (tracing,

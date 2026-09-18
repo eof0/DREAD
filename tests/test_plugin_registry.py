@@ -28,6 +28,18 @@ def test_default_scan_includes_api_discovery():
     assert "api_discovery" in ScanConfig("https://example.test").enabled_plugins
 
 
+def test_aggressive_mode_widens_the_host_failure_threshold():
+    # Aggressive mode sends several times the request volume, so the default
+    # circuit-breaker threshold trips on the target's own rate limiter far more
+    # easily than it would under a normal scan -- it should be widened, not left
+    # at the default meant for gentle, low-concurrency traffic.
+    default_engine = ScanEngine(ScanConfig("https://example.test"))
+    aggressive_engine = ScanEngine(ScanConfig("https://example.test", aggressive=True))
+
+    assert aggressive_engine.request_handler._max_host_failures > \
+        default_engine.request_handler._max_host_failures
+
+
 @pytest.mark.parametrize("profile", sorted(SCAN_PROFILES))
 def test_every_profile_plugin_is_loadable(profile):
     engine = ScanEngine(ScanConfig("https://example.test", profile=profile))
