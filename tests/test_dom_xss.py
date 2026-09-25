@@ -32,7 +32,13 @@ def _isolate_shared_browser_state():
     drop references (never close across threads); the abandoned pool's browsers
     leak until process exit, exactly the tradeoff _replace_poisoned_executor
     already accepts. Originals are restored afterwards so the file leaves the
-    world as it found it."""
+    world as it found it. Consequence: each real-Chromium test here builds its
+    own fresh pool (a reused ambient browser wouldn't re-register, which the
+    registry-count tests rely on) and abandons it at teardown -- up to
+    _BROWSER_POOL_SIZE Chromium processes leak per such test until the process
+    exits. We deliberately do NOT shut it down in teardown: closing a worker
+    thread's Playwright browser from this (main) thread is the cross-thread
+    access the sync API forbids, and is what previously hung the suite."""
     saved_executor = dom_xss._browser_executor
     saved_registry = dom_xss._browser_registry
     saved_browser = getattr(dom_xss._thread_browser, "browser", None)
@@ -153,7 +159,6 @@ def test_each_pool_worker_thread_gets_its_own_browser(monkeypatch):
     def worker(name):
         results[name] = dom_xss._ensure_thread_browser()
 
-    before = len(dom_xss._browser_registry)
     threads = [Thread(target=worker, args=(i,)) for i in range(3)]
     for t in threads:
         t.start()
@@ -162,7 +167,9 @@ def test_each_pool_worker_thread_gets_its_own_browser(monkeypatch):
 
     assert len(results) == 3
     assert len({id(b) for b in results.values()}) == 3   # three distinct browsers
-    assert len(dom_xss._browser_registry) == before + 3  # each worker registered its own
+    # The autouse fixture guarantees an empty registry at entry, so exactly the
+    # three workers' browsers are registered here.
+    assert len(dom_xss._browser_registry) == 3
 
 
 class _FakeExecutor:
