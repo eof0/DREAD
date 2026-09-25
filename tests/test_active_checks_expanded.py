@@ -202,3 +202,58 @@ def test_reflected_destination_without_redirect_is_not_flagged():
 
     findings = scan("url", responder)
     assert not any("Open Redirect" in t for t in _titles(findings))
+
+
+# -- CRLF / HTTP response-header injection -------------------------------------
+# Proven the same way SSTI/command injection are: not by the payload being
+# reflected into the body (that's XSS), but by a uniquely-named header the probe
+# asked for actually appearing in the response. A random marker in both the
+# header name and its value means a match can only be our own injection, so there
+# is no baseline to compare against and no room for a coincidental hit.
+
+def test_crlf_header_injection_is_detected():
+    def responder(params):
+        v = params["next"]
+        if isinstance(v, list):
+            v = v[0]
+        headers = {}
+        # Naive vulnerable stack: writes the value into Location, splitting on CRLF,
+        # so any trailing "Name: value" lines become real response headers.
+        first, sep, rest = v.partition("\r\n")
+        if sep:
+            for line in rest.split("\r\n"):
+                name, colon, val = line.partition(":")
+                if colon:
+                    headers[name.strip()] = val.strip()
+        headers["Location"] = first
+        return response(status=302, headers=headers)
+
+    findings = scan("next", responder)
+    assert any("Header Injection" in t for t in _titles(findings))
+
+
+def test_crlf_not_flagged_when_server_strips_control_chars():
+    # A server that sanitizes CR/LF out of the value before reflecting it must not
+    # be flagged -- the injected header never materializes.
+    def responder(params):
+        v = params["next"]
+        if isinstance(v, list):
+            v = v[0]
+        sanitized = v.replace("\r", "").replace("\n", "")
+        return response(status=302, headers={"Location": sanitized})
+
+    findings = scan("next", responder)
+    assert not any("Header Injection" in t for t in _titles(findings))
+
+
+def test_crlf_not_flagged_when_value_only_reflected_in_body():
+    # Value echoed into the page body is reflection (XSS territory), not header
+    # injection -- the CRLF check looks only at response headers.
+    def responder(params):
+        v = params["next"]
+        if isinstance(v, list):
+            v = v[0]
+        return response(f"<html><body>next={v}</body></html>")
+
+    findings = scan("next", responder)
+    assert not any("Header Injection" in t for t in _titles(findings))

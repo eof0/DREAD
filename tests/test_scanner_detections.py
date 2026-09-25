@@ -61,6 +61,21 @@ def _simulator(environ, start_response):
     elif path == "/go":
         nxt = query.get("next", ["/"])[0]
         status, headers = "302 FOUND", [("Location", nxt), ("Content-Type", "text/html")]
+    elif path == "/hdr":
+        # Response-splitting shape: reflect the value into Location and, if it
+        # carries CRLF, emit the trailing "Name: value" lines as real headers --
+        # exactly what a stack that doesn't sanitize CR/LF would do. parse_qs has
+        # already turned the wire %0D%0A back into \r\n.
+        nxt = query.get("next", ["/"])[0]
+        first, sep, rest = nxt.partition("\r\n")
+        extra = []
+        if sep:
+            for line in rest.split("\r\n"):
+                name, colon, val = line.partition(":")
+                if colon:
+                    extra.append((name.strip(), val.strip()))
+        status = "302 FOUND"
+        headers = [("Location", first), ("Content-Type", "text/html")] + extra
     elif path == "/api/me":
         origin = environ.get("HTTP_ORIGIN")
         headers = [("Content-Type", "application/json")]
@@ -121,6 +136,14 @@ def test_command_injection_detected(target):
 def test_open_redirect_detected(target):
     findings = WebVulnerabilitiesPlugin().scan({"url": f"{target}/go?next=/x", "depth": 0}, RequestHandler())
     assert any("Open Redirect" in t for t in _titles(findings))
+
+
+def test_crlf_header_injection_detected(target):
+    # Drives the real request path: requests URL-encodes the injected CR/LF to
+    # %0D%0A on the wire, the simulator decodes and reflects it into headers, and
+    # the check must see its uniquely-named header come back.
+    findings = WebVulnerabilitiesPlugin().scan({"url": f"{target}/hdr?next=/x", "depth": 0}, RequestHandler())
+    assert any("Header Injection" in t for t in _titles(findings))
 
 
 def test_cors_detected(target):

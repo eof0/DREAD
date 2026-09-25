@@ -10,9 +10,10 @@ from requests.exceptions import RequestException
 
 from plugins.base_plugin import BasePlugin, Finding
 from scanner.active_checks import (
+    command_injection,
+    crlf,
     css_injection,
     dom_xss,
-    command_injection,
     file_inclusion,
     prototype_pollution,
     redirects,
@@ -53,6 +54,7 @@ CHECKS = [
     file_inclusion.check,
     prototype_pollution.check,
     ssrf.check,
+    crlf.check,
 ]
 
 
