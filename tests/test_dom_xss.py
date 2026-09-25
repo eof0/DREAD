@@ -20,16 +20,27 @@ from scanner.active_checks.dom_xss import (
 
 @pytest.fixture(autouse=True)
 def _isolate_shared_browser_state():
-    """dom_xss's browser-pool state is module-level (executor, registry) and
-    thread-level (this test process's own threading.local() slot, which persists
-    across tests since pytest normally runs them all on the same OS thread) --
-    save and restore all of it around every test so the fake-object tests below
-    can't leak into each other or into the real-Chromium integration tests
-    elsewhere in this file."""
+    """dom_xss's browser-pool state is process-global (the executor and the
+    registry) and per-thread (this process's own threading.local() slot). Other
+    test files launch real pooled browsers via WebVulnerabilitiesPlugin().scan()
+    on HTML pages (web_vulnerabilities calls dom_xss.scan_dom for every HTML page)
+    and never clean them up, so by the time this file runs those globals are
+    already dirty with leaked entries. Give every test here a genuinely CLEAN
+    slate at setup -- otherwise leaked registry entries break the absolute-count
+    assertions below, and a fake-object test could try to close() a *real* leaked
+    browser from the wrong OS thread, which Playwright's sync API forbids. We only
+    drop references (never close across threads); the abandoned pool's browsers
+    leak until process exit, exactly the tradeoff _replace_poisoned_executor
+    already accepts. Originals are restored afterwards so the file leaves the
+    world as it found it."""
     saved_executor = dom_xss._browser_executor
-    saved_registry = list(dom_xss._browser_registry)
+    saved_registry = dom_xss._browser_registry
     saved_browser = getattr(dom_xss._thread_browser, "browser", None)
     saved_playwright = getattr(dom_xss._thread_browser, "playwright", None)
+    dom_xss._browser_executor = None
+    dom_xss._browser_registry = []
+    dom_xss._thread_browser.browser = None
+    dom_xss._thread_browser.playwright = None
     yield
     dom_xss._browser_executor = saved_executor
     dom_xss._browser_registry = saved_registry
@@ -142,6 +153,7 @@ def test_each_pool_worker_thread_gets_its_own_browser(monkeypatch):
     def worker(name):
         results[name] = dom_xss._ensure_thread_browser()
 
+    before = len(dom_xss._browser_registry)
     threads = [Thread(target=worker, args=(i,)) for i in range(3)]
     for t in threads:
         t.start()
@@ -150,7 +162,7 @@ def test_each_pool_worker_thread_gets_its_own_browser(monkeypatch):
 
     assert len(results) == 3
     assert len({id(b) for b in results.values()}) == 3   # three distinct browsers
-    assert len(dom_xss._browser_registry) == 3
+    assert len(dom_xss._browser_registry) == before + 3  # each worker registered its own
 
 
 class _FakeExecutor:
