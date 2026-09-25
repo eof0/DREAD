@@ -22,59 +22,70 @@ _missing_notice_shown = False
 # tore down a full headless browser per page, sometimes several at once, which is the
 # dominant cost on any site with more than a handful of pages. Playwright's sync API
 # is documented as unsafe to touch from more than one thread, so the fix isn't a lock
-# around concurrent access -- it's pinning the one shared browser to a single dedicated
-# worker thread (a ThreadPoolExecutor(max_workers=1) reuses the same OS thread for
-# every submitted task) and funneling every scan_dom() call through it. Callers from
-# any thread just get a Future back; the browser itself only ever runs one check at a
-# time, launched once and reused for the rest of the process.
+# around concurrent access -- it's a small pool of dedicated worker threads (a
+# ThreadPoolExecutor reuses the same fixed set of OS threads for every submitted
+# task), each with its OWN browser via threading.local(), launched lazily on first
+# use and reused for that thread's life. _BROWSER_POOL_SIZE trades launch count
+# against parallelism: 1 fully serializes every DOM check (no launch-thrashing, but
+# no overlap either); too many launches several headless Chromium processes at once
+# and reintroduces the local resource contention this was built to avoid. A handful
+# is the sweet spot. Callers from any thread just get a Future back.
+_BROWSER_POOL_SIZE = 3
+
 _browser_lock = threading.Lock()
 _browser_executor: ThreadPoolExecutor | None = None
-_shared_playwright = None
-_shared_browser = None
+_thread_browser = threading.local()          # per-worker-thread: .playwright, .browser
+_browser_registry: list = []                 # every (playwright, browser) pair, for cleanup --
+                                              # threading.local() data isn't reachable from
+                                              # outside its owning thread, so this is the only
+                                              # way atexit/pool-replacement can find them all.
 
 
 def _get_browser_executor() -> ThreadPoolExecutor:
     global _browser_executor
     with _browser_lock:
         if _browser_executor is None:
-            _browser_executor = ThreadPoolExecutor(max_workers=1,
+            _browser_executor = ThreadPoolExecutor(max_workers=_BROWSER_POOL_SIZE,
                                                     thread_name_prefix="dom-xss-browser")
             atexit.register(_shutdown_shared_browser)
         return _browser_executor
 
 
 def _replace_poisoned_executor(poisoned: ThreadPoolExecutor) -> None:
-    """A submitted check didn't finish within its budget -- the dedicated worker
-    thread may be permanently wedged (a hung page.evaluate()/context.close() on a
-    pathological target). Abandon that executor and the browser/driver it might
-    still be touching, and start fresh so later scan_dom() calls aren't queued
-    behind a task that will never return. The stuck thread and its browser leak
-    until the process exits; that's the acceptable cost of not risking a second
-    thread touching the same Playwright sync-API objects concurrently.
+    """A submitted check didn't finish within its budget -- one of the pool's
+    worker threads may be permanently wedged (a hung page.evaluate()/
+    context.close() on a pathological target). Abandon the whole pool and every
+    browser it might still be touching, and start fresh, rather than try to
+    identify and salvage just the healthy workers -- ThreadPoolExecutor doesn't
+    expose which worker ran a given future, so there's no safe way to reach into
+    only the stuck one. The stuck thread(s) and their browsers leak until the
+    process exits; that's the acceptable cost of not risking a new thread
+    touching the same Playwright sync-API objects concurrently.
     """
-    global _browser_executor, _shared_browser, _shared_playwright
+    global _browser_executor, _browser_registry
     with _browser_lock:
         if _browser_executor is poisoned:
             _browser_executor = None
-            _shared_browser = None
-            _shared_playwright = None
+            _browser_registry = []
 
 
-def _close_shared_browser() -> None:
-    """Runs ON the browser thread (via the executor) -- never call directly."""
-    global _shared_browser, _shared_playwright
-    if _shared_browser is not None:
+def _close_all_registered_browsers() -> None:
+    """Runs directly (never through the executor -- see _shutdown_shared_browser)
+    on whichever thread calls it. Only safe when every worker thread that might
+    still be touching these is already dead (process exit) or was already
+    abandoned (a poisoned-pool replace already cleared the registry first)."""
+    global _browser_registry
+    with _browser_lock:
+        pairs, _browser_registry = _browser_registry, []
+    for playwright, browser in pairs:
         try:
-            _shared_browser.close()
+            browser.close()
         except Exception:  # noqa: BLE001 - best-effort teardown
             pass
-        _shared_browser = None
-    if _shared_playwright is not None:
         try:
-            _shared_playwright.stop()
+            playwright.stop()
         except Exception:  # noqa: BLE001 - best-effort teardown
             pass
-        _shared_playwright = None
 
 
 def _shutdown_shared_browser() -> None:
@@ -86,44 +97,72 @@ def _shutdown_shared_browser() -> None:
     so executor.submit() here always raises "cannot schedule new futures after
     interpreter shutdown" (verified empirically). That join is exactly why a
     direct call is safe despite normally being a different-thread access: by the
-    time this runs, the dedicated browser thread is already dead, so nothing else
+    time this runs, every pool worker thread is already dead, so nothing else
     can be touching these objects.
     """
     global _browser_executor
     executor = _browser_executor
     if executor is None:
         return
-    _close_shared_browser()
+    _close_all_registered_browsers()
     executor.shutdown(wait=False)
     _browser_executor = None
 
 
-def _ensure_shared_browser():
-    """Runs ON the browser thread. Lazily launches once; reused on every later
-    call, with a liveness check so a crashed/killed browser gets relaunched
-    instead of silently going dark for the rest of the process."""
-    global _shared_browser, _shared_playwright
-    if _shared_browser is not None:
-        if _shared_browser.is_connected():
-            return _shared_browser
-        _close_shared_browser()  # stale/dead -- drop it and relaunch below
+def _ensure_thread_browser():
+    """Runs ON one of the pool's worker threads. Each worker lazily launches and
+    keeps its own Playwright+browser (threading.local()), reused for that
+    thread's remaining life, with a liveness check so a crashed/killed browser
+    gets relaunched instead of silently going dark for that worker."""
+    browser = getattr(_thread_browser, "browser", None)
+    if browser is not None:
+        if browser.is_connected():
+            return browser
+        _close_thread_browser()  # stale/dead -- drop it and relaunch below
 
     from playwright.sync_api import sync_playwright  # noqa: PLC0415 - optional dependency
 
-    _shared_playwright = sync_playwright().start()
+    playwright = sync_playwright().start()
     try:
-        _shared_browser = _shared_playwright.chromium.launch(headless=True)
+        browser = playwright.chromium.launch(headless=True)
     except Exception:
         # The driver process started but the browser itself failed to launch --
         # stop the driver too, so a failing/retried launch doesn't leak one
         # orphaned subprocess per attempt.
         try:
-            _shared_playwright.stop()
+            playwright.stop()
         except Exception:  # noqa: BLE001 - best-effort teardown
             pass
-        _shared_playwright = None
         raise
-    return _shared_browser
+    _thread_browser.playwright = playwright
+    _thread_browser.browser = browser
+    with _browser_lock:
+        _browser_registry.append((playwright, browser))
+    return browser
+
+
+def _close_thread_browser() -> None:
+    """Best-effort teardown of the CALLING thread's own browser -- only safe to
+    call from the worker thread that owns it (threading.local() is per-thread)."""
+    playwright = getattr(_thread_browser, "playwright", None)
+    browser = getattr(_thread_browser, "browser", None)
+    if browser is not None:
+        try:
+            browser.close()
+        except Exception:  # noqa: BLE001 - best-effort teardown
+            pass
+    if playwright is not None:
+        try:
+            playwright.stop()
+        except Exception:  # noqa: BLE001 - best-effort teardown
+            pass
+    _thread_browser.browser = None
+    _thread_browser.playwright = None
+    with _browser_lock:
+        try:
+            _browser_registry.remove((playwright, browser))
+        except ValueError:
+            pass
 
 DOM_PROBE_SCRIPT = r"""
 (() => {
@@ -251,13 +290,13 @@ def _missing_playwright_notice() -> None:
 
 
 def _run_dom_check(url: str, timeout_ms: int) -> list[Finding]:
-    """The actual browser work. Runs ON the dedicated browser thread (via the
-    single-worker executor in scan_dom) -- never call this directly from elsewhere."""
+    """The actual browser work. Runs ON one of the pool's dedicated browser
+    threads (via the executor in scan_dom) -- never call this directly."""
     origin = _origin(url)
     if origin is None:
         return []
     try:
-        browser = _ensure_shared_browser()
+        browser = _ensure_thread_browser()
     except ImportError:
         _missing_playwright_notice()
         return []
@@ -305,8 +344,8 @@ def _run_dom_check(url: str, timeout_ms: int) -> list[Finding]:
 
 
 def scan_dom(url: str, timeout_ms: int = 10000) -> list[Finding]:
-    """Safe to call from any thread: the real browser work always runs on the one
-    dedicated browser thread, so this just submits and waits for the result."""
+    """Safe to call from any thread: the real browser work always runs on one of
+    the pool's dedicated browser threads, so this just submits and waits."""
     executor = _get_browser_executor()
     future = executor.submit(_run_dom_check, url, timeout_ms)
     try:

@@ -20,12 +20,21 @@ from scanner.active_checks.dom_xss import (
 
 @pytest.fixture(autouse=True)
 def _isolate_shared_browser_state():
-    """dom_xss's shared browser/executor are module-level globals -- save and
-    restore them around every test so the fake-object tests below can't leak
-    state into the real-Chromium integration tests elsewhere in this file."""
-    saved = (dom_xss._browser_executor, dom_xss._shared_browser, dom_xss._shared_playwright)
+    """dom_xss's browser-pool state is module-level (executor, registry) and
+    thread-level (this test process's own threading.local() slot, which persists
+    across tests since pytest normally runs them all on the same OS thread) --
+    save and restore all of it around every test so the fake-object tests below
+    can't leak into each other or into the real-Chromium integration tests
+    elsewhere in this file."""
+    saved_executor = dom_xss._browser_executor
+    saved_registry = list(dom_xss._browser_registry)
+    saved_browser = getattr(dom_xss._thread_browser, "browser", None)
+    saved_playwright = getattr(dom_xss._thread_browser, "playwright", None)
     yield
-    dom_xss._browser_executor, dom_xss._shared_browser, dom_xss._shared_playwright = saved
+    dom_xss._browser_executor = saved_executor
+    dom_xss._browser_registry = saved_registry
+    dom_xss._thread_browser.browser = saved_browser
+    dom_xss._thread_browser.playwright = saved_playwright
 
 
 class _FakeBrowser:
@@ -73,45 +82,75 @@ def _install_fake_playwright(monkeypatch, browser_factory, launch_error=None):
     return instances
 
 
-# -- shared-browser resilience: liveness, leak-free launch failure, poisoned-worker
-# -- recovery, and atexit cleanup that doesn't route through the executor -----------
+# -- browser-pool resilience: per-thread liveness, leak-free launch failure,
+# -- poisoned-pool recovery, and atexit cleanup that doesn't route through the
+# -- executor -------------------------------------------------------------------
 
-def test_ensure_shared_browser_reuses_a_live_browser():
+def test_browser_pool_size_is_a_couple_not_one_and_not_many():
+    # One fully serializes every DOM check with no parallelism; a bunch launches
+    # that many headless Chromium processes at once and reintroduces the local
+    # resource contention this design exists to avoid. Somewhere in between.
+    assert 2 <= dom_xss._BROWSER_POOL_SIZE <= 5
+
+
+def test_ensure_thread_browser_reuses_a_live_browser():
     live = _FakeBrowser(connected=True)
-    dom_xss._shared_browser = live
-    dom_xss._shared_playwright = _FakePlaywrightInstance(lambda: live)
+    dom_xss._thread_browser.browser = live
+    dom_xss._thread_browser.playwright = _FakePlaywrightInstance(lambda: live)
 
-    assert dom_xss._ensure_shared_browser() is live   # no playwright import needed
+    assert dom_xss._ensure_thread_browser() is live   # no playwright import needed
 
 
-def test_ensure_shared_browser_relaunches_a_dead_browser(monkeypatch):
+def test_ensure_thread_browser_relaunches_a_dead_browser(monkeypatch):
     dead = _FakeBrowser(connected=False)
     old_playwright = _FakePlaywrightInstance(lambda: dead)
-    dom_xss._shared_browser = dead
-    dom_xss._shared_playwright = old_playwright
+    dom_xss._thread_browser.browser = dead
+    dom_xss._thread_browser.playwright = old_playwright
+    dom_xss._browser_registry.append((old_playwright, dead))
 
     fresh = _FakeBrowser(connected=True)
     _install_fake_playwright(monkeypatch, browser_factory=lambda: fresh)
 
-    result = dom_xss._ensure_shared_browser()
+    result = dom_xss._ensure_thread_browser()
 
     assert result is fresh
-    assert dead.close_calls == 1          # dead browser was torn down
+    assert dead.close_calls == 1           # dead browser was torn down
     assert old_playwright.stop_calls == 1  # its driver was stopped too
+    assert (old_playwright, dead) not in dom_xss._browser_registry
+    assert any(browser is fresh for _pw, browser in dom_xss._browser_registry)
 
 
-def test_ensure_shared_browser_stops_the_driver_when_launch_fails(monkeypatch):
-    dom_xss._shared_browser = None
-    dom_xss._shared_playwright = None
+def test_ensure_thread_browser_stops_the_driver_when_launch_fails(monkeypatch):
+    dom_xss._thread_browser.browser = None
+    dom_xss._thread_browser.playwright = None
     instances = _install_fake_playwright(monkeypatch, browser_factory=lambda: None,
                                           launch_error=RuntimeError("no chromium binary"))
 
     with pytest.raises(RuntimeError):
-        dom_xss._ensure_shared_browser()
+        dom_xss._ensure_thread_browser()
 
     assert len(instances) == 1
     assert instances[0].stop_calls == 1    # driver stopped, not leaked
-    assert dom_xss._shared_playwright is None
+    assert getattr(dom_xss._thread_browser, "playwright", None) is None
+
+
+def test_each_pool_worker_thread_gets_its_own_browser(monkeypatch):
+    _install_fake_playwright(monkeypatch, browser_factory=lambda: _FakeBrowser())
+
+    results = {}
+
+    def worker(name):
+        results[name] = dom_xss._ensure_thread_browser()
+
+    threads = [Thread(target=worker, args=(i,)) for i in range(3)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(results) == 3
+    assert len({id(b) for b in results.values()}) == 3   # three distinct browsers
+    assert len(dom_xss._browser_registry) == 3
 
 
 class _FakeExecutor:
@@ -130,14 +169,14 @@ def test_shutdown_shared_browser_closes_directly_not_through_executor_submit():
     fake_executor = _FakeExecutor()
     browser = _FakeBrowser(connected=True)
     dom_xss._browser_executor = fake_executor
-    dom_xss._shared_browser = browser
-    dom_xss._shared_playwright = _FakePlaywrightInstance(lambda: browser)
+    dom_xss._browser_registry.append((_FakePlaywrightInstance(lambda: browser), browser))
 
     dom_xss._shutdown_shared_browser()   # must not raise, even though .submit() would
 
     assert browser.close_calls == 1
     assert fake_executor.shutdown_calls == 1
     assert dom_xss._browser_executor is None
+    assert dom_xss._browser_registry == []
 
 
 def test_shutdown_shared_browser_is_a_noop_with_no_executor():
@@ -145,17 +184,15 @@ def test_shutdown_shared_browser_is_a_noop_with_no_executor():
     dom_xss._shutdown_shared_browser()   # must not raise
 
 
-def test_replace_poisoned_executor_drops_stale_browser_state():
+def test_replace_poisoned_executor_drops_the_browser_registry():
     poisoned = object()
     dom_xss._browser_executor = poisoned
-    dom_xss._shared_browser = _FakeBrowser()
-    dom_xss._shared_playwright = _FakePlaywrightInstance(lambda: None)
+    dom_xss._browser_registry.append((_FakePlaywrightInstance(lambda: None), _FakeBrowser()))
 
     dom_xss._replace_poisoned_executor(poisoned)
 
     assert dom_xss._browser_executor is None
-    assert dom_xss._shared_browser is None
-    assert dom_xss._shared_playwright is None
+    assert dom_xss._browser_registry == []
 
 
 def test_replace_poisoned_executor_ignores_an_already_replaced_executor():
@@ -230,12 +267,14 @@ def test_dom_event_becomes_redacted_finding():
 
 
 def test_scan_dom_skips_when_playwright_is_unavailable(monkeypatch):
-    # Force a clean slate: _ensure_shared_browser() reuses a live browser without
-    # re-importing, so a browser left over from an earlier test would make this
-    # pass vacuously (via the generic except-Exception fallback) instead of
-    # actually exercising the ImportError path this test claims to cover.
-    dom_xss._shared_browser = None
-    dom_xss._shared_playwright = None
+    # Force a clean slate. scan_dom() runs on whichever pool worker thread picks
+    # up the task -- resetting *this* (the test's own) thread's threading.local()
+    # slot wouldn't reach it. Dropping the executor instead means fresh worker
+    # threads whose browser slot is guaranteed empty, so this actually exercises
+    # the ImportError path rather than possibly reusing a browser a pool worker
+    # already launched during an earlier test.
+    dom_xss._browser_executor = None
+    dom_xss._browser_registry = []
     monkeypatch.setattr("builtins.__import__", _missing_playwright_import)
     assert scan_dom("https://example.test/") == []
 
@@ -310,39 +349,38 @@ def _serve_plain_page() -> HTTPServer:
     return server
 
 
-def test_multiple_scan_dom_calls_reuse_the_same_browser_process():
+def test_repeated_scan_dom_calls_never_launch_more_browsers_than_the_pool_size():
     _chromium_or_skip()
-    import scanner.active_checks.dom_xss as dom_xss
 
     server = _serve_plain_page()
     try:
-        scan_dom(f"http://127.0.0.1:{server.server_port}/a")
-        first_browser = dom_xss._shared_browser
-        assert first_browser is not None
+        for i in range(10):   # far more calls than _BROWSER_POOL_SIZE
+            scan_dom(f"http://127.0.0.1:{server.server_port}/{i}")
 
-        scan_dom(f"http://127.0.0.1:{server.server_port}/b")
-        second_browser = dom_xss._shared_browser
-
-        assert second_browser is first_browser   # no relaunch between calls
+        # Every call was served by one of a small, reused set of browsers --
+        # never a fresh launch per call.
+        assert 0 < len(dom_xss._browser_registry) <= dom_xss._BROWSER_POOL_SIZE
     finally:
         server.shutdown()
 
 
-def test_concurrent_scan_dom_calls_are_serialized_without_crashing():
+def test_concurrent_scan_dom_calls_do_not_crash_and_reuse_the_pool():
     # Playwright's sync API is not safe to touch from multiple threads at once --
-    # this proves the dedicated-thread fix holds up under real concurrent pressure
-    # (matching engine.py's ThreadPoolExecutor driving several (url, plugin) tasks
-    # at the same time), not just that a single call still works.
+    # this proves the per-thread-browser pool fix holds up under real concurrent
+    # pressure (matching engine.py's ThreadPoolExecutor driving several
+    # (url, plugin) tasks at the same time), and that it stays within the pool
+    # size rather than launching one browser per concurrent caller.
     _chromium_or_skip()
     from concurrent.futures import ThreadPoolExecutor
 
     server = _serve_plain_page()
     try:
-        urls = [f"http://127.0.0.1:{server.server_port}/{i}" for i in range(5)]
-        with ThreadPoolExecutor(max_workers=5) as pool:
+        urls = [f"http://127.0.0.1:{server.server_port}/{i}" for i in range(8)]
+        with ThreadPoolExecutor(max_workers=8) as pool:
             results = list(pool.map(scan_dom, urls))
-        assert len(results) == 5
+        assert len(results) == 8
         assert all(isinstance(r, list) for r in results)   # every call completed cleanly
+        assert len(dom_xss._browser_registry) <= dom_xss._BROWSER_POOL_SIZE
     finally:
         server.shutdown()
 
