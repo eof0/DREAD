@@ -4,16 +4,14 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import sys
-import threading
-from datetime import datetime, timezone
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -24,7 +22,6 @@ RUNS_DIR = Path(
     os.environ.get("DREAD_RUNS_DIR", Path.home() / ".dread" / "runs")
 ).resolve()
 DASHBOARD_DIR = ROOT / "reports" / "dashboard" / "dist"
-RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 sys.path.insert(0, str(ROOT))
@@ -32,16 +29,28 @@ from env_loader import load_env_file  # noqa: E402
 
 load_env_file(ROOT / ".env")
 
-app = FastAPI(title="DREAD", version="1.0")
+from reports.api.jobs import JobManager, QueueFull
+
+
+@asynccontextmanager
+async def lifespan(app):
+    with JobManager(
+        RUNS_DIR, cwd=ROOT,
+        workers=max(1, int(os.environ.get("DREAD_JOB_WORKERS", "2"))),
+        queue_size=max(1, int(os.environ.get("DREAD_JOB_QUEUE_SIZE", "8"))),
+        timeout=max(1, float(os.environ.get("DREAD_JOB_TIMEOUT", "3600"))),
+    ) as manager:
+        app.state.jobs = manager
+        yield
+
+
+app = FastAPI(title="DREAD", version="1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
-
-_jobs: dict[str, dict] = {}
-_jobs_lock = threading.Lock()
 
 
 class ScanRequest(BaseModel):
@@ -91,68 +100,16 @@ def _safe_target(target: str) -> str:
     return value
 
 
-def _write_event(job_dir: Path, event: dict) -> None:
-    with (job_dir / "events.jsonl").open("a", encoding="utf-8") as stream:
-        stream.write(json.dumps(event) + "\n")
-
-
 def _latest_report(job_dir: Path) -> Path | None:
     reports = sorted(job_dir.glob("run_*/suite_report/dread_suite_report.json"))
     return reports[-1] if reports else None
 
 
-def _stream_job(job_id: str, job_dir: Path, command: list[str], finalize=None) -> None:
-    _write_event(job_dir, {"type": "started", "command": command[1:]})
-    with _jobs_lock:
-        _jobs[job_id]["status"] = "running"
+def _start_job(kind, command, meta=None, finalize=None):
     try:
-        process = subprocess.Popen(
-            command,
-            cwd=ROOT,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            env={**os.environ, "PYTHONUNBUFFERED": "1"},
-        )
-        assert process.stdout is not None
-        buffer = ""
-        while True:
-            chunk = process.stdout.read(256)
-            if not chunk:
-                break
-            buffer += chunk
-            # Split on both newline and carriage return so in-place progress
-            # counters (e.g. "still running... 10s elapsed\r") stream too.
-            parts = re.split(r"[\r\n]", buffer)
-            buffer = parts.pop()
-            for part in parts:
-                message = part.strip()
-                if message:
-                    _write_event(job_dir, {"type": "log", "message": message})
-        if buffer.strip():
-            _write_event(job_dir, {"type": "log", "message": buffer.strip()})
-        return_code = process.wait()
-        extra = finalize(return_code) if finalize else {}
-        status = extra.pop("status", None) or ("completed" if return_code == 0 else "failed")
-        _write_event(job_dir, {"type": "finished", "status": status, "return_code": return_code, **extra})
-        with _jobs_lock:
-            _jobs[job_id].update({"status": status, "return_code": return_code, **extra})
-    except OSError as exc:
-        _write_event(job_dir, {"type": "finished", "status": "failed", "error": str(exc)})
-        with _jobs_lock:
-            _jobs[job_id].update({"status": "failed", "error": str(exc)})
-
-
-def _start_job(kind: str, command: list[str], meta: dict | None = None, finalize=None) -> dict:
-    job_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + os.urandom(4).hex()
-    job = {"kind": kind, "status": "queued", "created_at": datetime.now(timezone.utc).isoformat(), **(meta or {})}
-    with _jobs_lock:
-        _jobs[job_id] = job
-    job_dir = RUNS_DIR / job_id
-    job_dir.mkdir(parents=True, exist_ok=True)
-    threading.Thread(target=_stream_job, args=(job_id, job_dir, command, finalize), daemon=True).start()
-    return _job_summary(job_id, job)
+        return app.state.jobs.submit(kind, command, meta, finalize)
+    except QueueFull as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
 
 
 def _scan_command(job_dir: Path, target: str, max_subdomains: int) -> list[str]:
@@ -171,20 +128,15 @@ def _scan_command(job_dir: Path, target: str, max_subdomains: int) -> list[str]:
     ]
 
 
-def _scan_finalize(job_dir: Path):
-    def finalize(return_code: int) -> dict:
-        report_path = _latest_report(job_dir)
-        status = "completed" if return_code == 0 and report_path else "failed"
-        extra = {"status": status, "report_path": str(report_path) if report_path else None}
-        if report_path:
-            extra["report_id"] = report_path.parent.parent.name
-        return extra
-
-    return finalize
-
-
-def _job_summary(job_id: str, job: dict) -> dict:
-    return {"id": job_id, **{key: value for key, value in job.items() if key != "report_path"}, "has_report": bool(job.get("report_path"))}
+def _scan_finalize(job_dir: Path, return_code: int) -> dict:
+    report_path = _latest_report(job_dir)
+    status = "completed" if return_code == 0 and report_path else "failed"
+    if report_path:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        if report.get("rollups", {}).get("partial"):
+            status = "partial"
+    return {"status": status, "report_path": str(report_path) if report_path else None,
+            "report_id": job_dir.name if report_path else None}
 
 
 @app.get("/api/health")
@@ -194,41 +146,24 @@ def health() -> dict:
 
 @app.get("/api/scans")
 def scans() -> list[dict]:
-    with _jobs_lock:
-        return [_job_summary(job_id, job) for job_id, job in _jobs.items()]
+    return [job for job in app.state.jobs.list() if job["kind"] == "scan"]
 
 
 @app.post("/api/scans", status_code=202)
 def start_scan(request: ScanRequest) -> dict:
     target = _validate_target(request.target)
-    job_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + os.urandom(4).hex()
-    job = {"kind": "scan", "target": target, "status": "queued", "created_at": datetime.now(timezone.utc).isoformat()}
-    with _jobs_lock:
-        _jobs[job_id] = job
-    job_dir = RUNS_DIR / job_id
-    job_dir.mkdir(parents=True, exist_ok=True)
-    command = _scan_command(job_dir, target, request.max_subdomains)
-    threading.Thread(
-        target=_stream_job, args=(job_id, job_dir, command, _scan_finalize(job_dir)), daemon=True
-    ).start()
-    return _job_summary(job_id, job)
+    return _start_job("scan", lambda folder: _scan_command(folder, target, request.max_subdomains),
+                      {"target": target}, _scan_finalize)
 
 
 @app.get("/api/scans/{job_id}")
 def scan_status(job_id: str) -> dict:
-    with _jobs_lock:
-        job = _jobs.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Scan not found")
-    return _job_summary(job_id, job)
+    return job_status(job_id)
 
 
 @app.get("/api/scans/{job_id}/events")
-def scan_events(job_id: str) -> list[dict]:
-    path = RUNS_DIR / job_id / "events.jsonl"
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="Scan not found")
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+def scan_events(job_id: str, cursor: int = Query(default=0, ge=0)) -> dict:
+    return job_events(job_id, cursor)
 
 
 def _reports() -> list[tuple[str, Path]]:
@@ -249,7 +184,7 @@ def runs() -> list[dict]:
             "target": report.get("target") or report.get("title"),
             "generated_at": report.get("generated_at"),
             "total_findings": (report.get("rollups") or {}).get("total_findings", 0),
-            "risk_level": ((report.get("rollups") or {}).get("risk") or {}).get("level"),
+            "risk_level": (report.get("rollups") or {}).get("overall_risk"),
         })
     return sorted(result, key=lambda item: item.get("generated_at") or "", reverse=True)
 
@@ -275,25 +210,31 @@ def run_report(report_id: str) -> dict:
 
 @app.get("/api/jobs")
 def jobs() -> list[dict]:
-    with _jobs_lock:
-        return [_job_summary(job_id, job) for job_id, job in _jobs.items()]
+    return app.state.jobs.list()
 
 
 @app.get("/api/jobs/{job_id}")
 def job_status(job_id: str) -> dict:
-    with _jobs_lock:
-        job = _jobs.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return _job_summary(job_id, job)
+    try:
+        return app.state.jobs.get(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Job not found") from exc
 
 
 @app.get("/api/jobs/{job_id}/events")
-def job_events(job_id: str) -> list[dict]:
-    path = RUNS_DIR / job_id / "events.jsonl"
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="Job not found")
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+def job_events(job_id: str, cursor: int = Query(default=0, ge=0)) -> dict:
+    try:
+        return app.state.jobs.events(job_id, cursor)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Job not found") from exc
+
+
+@app.post("/api/jobs/{job_id}/cancel")
+def cancel_job(job_id: str) -> dict:
+    try:
+        return app.state.jobs.cancel(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Job not found") from exc
 
 
 @app.get("/api/products")

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getJSON } from "./api";
+import { getJSON, standalone } from "./api";
 import { ReportView } from "./reports";
 import { DreadAIView, CannonView, DatabaseView, DiscoverView, ScanView } from "./views";
 import type { Product } from "./types";
@@ -20,6 +20,7 @@ const GROUPS = ["Reports", "Assess", "Operate"];
 function useProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   useEffect(() => {
+    if (standalone) return;
     getJSON<Product[]>("/api/products").then(setProducts).catch(() => setProducts([]));
   }, []);
   return products;
@@ -30,6 +31,8 @@ export default function App() {
   const [reloadKey, setReloadKey] = useState(0);
   const products = useProducts();
   const implemented = products.filter((product) => product.status === "implemented").length;
+
+  if (standalone) return <main className="main"><ReportView reloadKey={0} /></main>;
 
   return (
     <div className="app-shell">

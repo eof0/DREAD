@@ -15,8 +15,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export function ScanView({ onReportsChanged }: { onReportsChanged: () => void }) {
   const [target, setTarget] = useState("");
   const [subs, setSubs] = useState(10);
-  const { job, events, error, running, start } = useJob((done: JobSummary) => {
-    if (done.status === "completed") onReportsChanged();
+  const { job, events, error, running, start, cancel } = useJob("scan", (done: JobSummary) => {
+    if (done.has_report) onReportsChanged();
   });
   return (
     <div className="view">
@@ -30,14 +30,14 @@ export function ScanView({ onReportsChanged }: { onReportsChanged: () => void })
         <button className="run" disabled={!target.trim() || running} onClick={() => start("/api/scans", { target, max_subdomains: subs })}>Start scan</button>
       </div>
       {error && <p className="form-error">{error}</p>}
-      <JobConsole job={job} events={events} />
+      <JobConsole job={job} events={events} onCancel={cancel} />
     </div>
   );
 }
 
 export function DiscoverView() {
   const [target, setTarget] = useState("");
-  const { job, events, error, running, start } = useJob();
+  const { job, events, error, running, start, cancel } = useJob("scope.discover");
   return (
     <div className="view">
       <div className="view-lede">
@@ -49,7 +49,7 @@ export function DiscoverView() {
         <button className="run" disabled={!target.trim() || running} onClick={() => start("/api/scope/discover", { target })}>Discover</button>
       </div>
       {error && <p className="form-error">{error}</p>}
-      <JobConsole job={job} events={events} />
+      <JobConsole job={job} events={events} onCancel={cancel} />
     </div>
   );
 }
@@ -60,7 +60,7 @@ export function CannonView() {
   const [target, setTarget] = useState("");
   const [mode, setMode] = useState("all");
   const [authorized, setAuthorized] = useState(false);
-  const { job, events, error, running, start } = useJob();
+  const { job, events, error, running, start, cancel } = useJob("cannon.");
 
   const loadTools = () =>
     getJSON<CannonTool[]>("/api/cannon/tools").then((list) => {
@@ -126,7 +126,7 @@ export function CannonView() {
       </div>
 
       {error && <p className="form-error">{error}</p>}
-      <JobConsole job={job} events={events} />
+      <JobConsole job={job} events={events} onCancel={cancel} />
     </div>
   );
 }
@@ -168,7 +168,7 @@ export function DreadAIView() {
 }
 
 export function DatabaseView() {
-  const { job, events, error, running, start } = useJob();
+  const { job, events, error, running, start, cancel } = useJob("db.");
   return (
     <div className="view">
       <div className="view-lede">
@@ -180,7 +180,7 @@ export function DatabaseView() {
         <button className="run" disabled={running} onClick={() => start("/api/db/update-cve", {})}>Update CVE database</button>
       </div>
       {error && <p className="form-error">{error}</p>}
-      <JobConsole job={job} events={events} />
+      <JobConsole job={job} events={events} onCancel={cancel} />
     </div>
   );
 }

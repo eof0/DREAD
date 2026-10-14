@@ -132,6 +132,26 @@ Open `http://127.0.0.1:8765`.
 Runs are stored in `~/.dread/runs` by default.
 Set `DREAD_RUNS_DIR` to use another directory.
 
+Job execution is bounded by environment variables:
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `DREAD_JOB_WORKERS` | 2 | How many jobs run at once |
+| `DREAD_JOB_QUEUE_SIZE` | 8 | How many jobs may wait; further submits return HTTP 429 |
+| `DREAD_JOB_TIMEOUT` | 3600 | Seconds before a running job is stopped |
+
+`GET /api/jobs/{id}/events?cursor=0` returns `{"events": [...], "cursor": <byte offset>}`.
+Pass the returned cursor on the next poll to read only lines appended since that offset.
+The same shape is used by `GET /api/scans/{id}/events`.
+
+Browser regressions need a built dashboard and Playwright Chromium:
+
+```bash
+cd reports/dashboard && npm ci && npm run build && cd ../..
+pip install -r requirements-dom.txt && python -m playwright install chromium
+DREAD_TEST_BROWSER=1 python -m pytest tests/test_dashboard_browser.py
+```
+
 ## Installer details
 
 The installer:

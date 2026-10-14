@@ -271,6 +271,7 @@ class ScanEngine:
         self.plugins = []
         self.findings = []
         self._cancelled = False
+        self.load_errors = []
         self.scan_id = f"scan_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         self.console = ColoredConsole()
         self.max_workers = getattr(config, 'parallel_workers', 8)
@@ -296,6 +297,8 @@ class ScanEngine:
         }
 
         for plugin_name in self.config.enabled_plugins:
+            if plugin_name not in plugin_map:
+                self.load_errors.append({"plugin": plugin_name, "error": "Unknown plugin"})
             if plugin_name in plugin_map:
                 try:
                     module_path, class_name = plugin_map[plugin_name].rsplit(".", 1)
@@ -307,6 +310,7 @@ class ScanEngine:
                     if self.verbose:
                         self.console.info(f"  Plugin description: {plugin.get_description()}")
                 except Exception as e:
+                    self.load_errors.append({"plugin": plugin_name, "error": str(e)})
                     self.console.error(f"Failed to load plugin {plugin_name}: {e}")
                     logger.error(f"Plugin load failed: {plugin_name}", exc_info=True)
 
@@ -320,7 +324,7 @@ class ScanEngine:
         plugin_name = plugin.get_name()
         try:
             if url_info.get("response") is None:
-                return (plugin_name, [], None)
+                return (plugin_name, [], "No response from target")
             if self.verbose:
                 self.console.info(f"[VERBOSE] Running plugin '{plugin_name}' on {url_info['url']}")
             logger.debug(f"Running plugin {plugin_name} on {url_info['url']}")
@@ -404,10 +408,6 @@ class ScanEngine:
 
         self.load_plugins()
         
-        if not self.plugins:
-            self.console.error("No plugins loaded - scan cannot continue")
-            raise RuntimeError("No plugins loaded")
-
         # Press-a-key-to-stop control spans the whole scan (no-op off a TTY).
         canceller = KeypressCanceller(self._request_cancel)
         canceller.__enter__()
@@ -429,6 +429,9 @@ class ScanEngine:
         total_tasks = len(urls) * len(self.plugins)
         completed_tasks = 0
         failed_plugins = []
+        successful_checks = 0
+        performed = set()
+        skipped_checks = 0
         
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             future_to_task = {}
@@ -469,10 +472,14 @@ class ScanEngine:
 
                         if error:
                             failed_plugins.append((plugin_name, url_info['url'], error))
+                            if url_info.get("response") is None:
+                                skipped_checks += 1
                             self.console.error(
                                 f"[{completed_tasks}/{total_tasks}] {plugin_name} failed on {url_info['url']}: {error}"
                             )
                         else:
+                            successful_checks += 1
+                            performed.add(plugin_name)
                             self.findings.extend(findings)
                             if findings:
                                 self.console.plugin_result(plugin_name, len(findings))
@@ -491,6 +498,7 @@ class ScanEngine:
                             )
 
                     except Exception as e:
+                        failed_plugins.append((plugin.get_name(), url_info['url'], str(e)))
                         logger.error(f"Unexpected error processing task: {e}", exc_info=True)
 
         canceller.__exit__(None, None, None)
@@ -522,9 +530,31 @@ class ScanEngine:
 
         self.console.info("Generating report...")
         report = self._generate_report(duration, attack_chains, grouped_findings)
-        if self._cancelled and isinstance(report.get("statistics"), dict):
-            report["statistics"]["cancelled"] = True
-            report["statistics"]["partial"] = True
+        partial = bool(self._cancelled or failed_plugins or self.load_errors or not successful_checks)
+        status = "cancelled" if self._cancelled else (
+            "failed" if not successful_checks else "partial" if partial else "completed"
+        )
+        stats = report["statistics"]
+        stats.update({
+            "status": status, "partial": partial, "cancelled": self._cancelled,
+            "urls_attempted": len(urls),
+            "urls_scanned": sum(url.get("response") is not None for url in urls),
+            "checks_performed": sorted(performed),
+            "checks": {
+                "total": total_tasks, "successful": successful_checks,
+                "failed": len(failed_plugins) - skipped_checks,
+                "skipped": skipped_checks + total_tasks - completed_tasks,
+            },
+            "check_errors": self.load_errors + [
+                {"plugin": name, "url": url, "error": error}
+                for name, url, error in failed_plugins
+            ],
+        })
+        if not successful_checks:
+            stats["overall_risk_score"] = None
+            stats["risk"].update(level="unknown", normalized_score=None)
+        if partial:
+            self.console.warning(f"Assessment {status}: coverage is incomplete.")
         output_name = self.config.output_name or self._default_output_name()
         
         try:

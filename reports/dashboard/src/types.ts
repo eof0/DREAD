@@ -20,6 +20,10 @@ export type SuiteReport = {
     scope?: { included?: boolean; summary?: Record<string, unknown> };
   };
   rollups?: {
+    overall_risk?: string;
+    risk_score?: number | null;
+    partial?: boolean;
+    urls_scanned?: number;
     total_findings?: number;
     findings_by_severity?: Record<string, number>;
     findings_by_plugin?: Record<string, number>;

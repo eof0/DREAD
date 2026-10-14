@@ -83,6 +83,40 @@ def test_html_lists_checks_performed(tmp_path):
     assert "security_headers" in doc and "web_vulnerabilities" in doc
 
 
+def test_writers_label_null_risk_score_as_incomplete(tmp_path, monkeypatch):
+    from writers.html_writer import write_suite_html
+    from writers.json_writer import write_technical_json
+    import writers.pdf_writer as pdf_writer
+
+    report = _report()
+    report["rollups"]["overall_risk"] = "unknown"
+    report["rollups"]["risk_score"] = None
+    report["rollups"]["partial"] = True
+    report["rollups"]["vulnerability_count"] = 0
+    report["findings"] = [report["findings"][1]]
+
+    html = write_suite_html(report, tmp_path, "technical_report").read_text()
+    assert "Incomplete assessment. Risk score: unrated." in html
+    assert "not a clean result" in html
+    assert "No vulnerabilities were identified." not in html
+
+    data = json.loads(write_technical_json(report, tmp_path, "technical_json").read_text())
+    assert data["rollups"]["risk_score"] is None
+
+    texts: list[str] = []
+    real = pdf_writer.Paragraph
+
+    def recording(text, style, *args, **kwargs):
+        texts.append(text)
+        return real(text, style, *args, **kwargs)
+
+    monkeypatch.setattr(pdf_writer, "Paragraph", recording)
+    pdf_writer.write_suite_pdf(report, tmp_path, "technical_pdf")
+    joined = "\n".join(texts)
+    assert "Incomplete assessment. Risk score: unrated." in joined
+    assert "not a clean result" in joined
+
+
 def test_technical_json_omits_raw_embed_and_suite_key(tmp_path):
     from writers.json_writer import write_technical_json
 

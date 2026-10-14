@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getJSON } from "./api";
+import { getJSON, standalone } from "./api";
 import type { HistoryRun, JobSummary, NormalizedFinding, SuiteReport } from "./types";
 
 const SEVERITIES = ["critical", "high", "medium", "low", "info"];
@@ -12,6 +12,11 @@ export function useReports(reloadKey: number) {
   useEffect(() => {
     (async () => {
       try {
+        setError(null);
+        if (standalone) {
+          setReport(await getJSON<SuiteReport>("./report.json"));
+          return;
+        }
         const list = await getJSON<HistoryRun[]>("/api/runs");
         setRuns(list);
         if (list.length) setReport(await getJSON<SuiteReport>("/api/runs/latest"));
@@ -22,20 +27,26 @@ export function useReports(reloadKey: number) {
     })();
   }, [reloadKey]);
 
-  const select = async (id: string) => setReport(await getJSON<SuiteReport>(`/api/runs/${id}`));
+  const select = async (id: string) => {
+    try {
+      setReport(await getJSON<SuiteReport>(`/api/runs/${id}`));
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
   return { report, runs, error, select };
 }
 
 function RiskRail({ report }: { report: SuiteReport }) {
-  const stats = report.statistics || {};
-  const score = stats.risk?.normalized_score ?? 0;
-  const level = stats.risk?.level || "unrated";
-  const total = report.rollups?.total_findings ?? stats.total_findings ?? report.findings?.length ?? 0;
+  const score = report.rollups?.risk_score;
+  const level = report.rollups?.overall_risk || "unknown";
+  const total = report.rollups?.total_findings ?? report.findings?.length ?? 0;
   return (
     <section className="risk-rail" aria-label="Risk summary">
       <div className="risk-score">
         <span className="eyebrow">Exposure index</span>
-        <strong>{Math.round(score)}</strong>
+        <strong>{score == null ? "Unrated" : Math.round(score)}</strong>
         <span className={`risk-level level-${level.toLowerCase()}`}>{level}</span>
       </div>
       <div className="rail-stat">
@@ -43,8 +54,8 @@ function RiskRail({ report }: { report: SuiteReport }) {
         <strong>{total}</strong>
       </div>
       <div className="rail-stat">
-        <span>Endpoints in scope</span>
-        <strong>{report.findings?.reduce((sum, finding) => sum + (finding.endpoint_count || 1), 0) || 0}</strong>
+        <span>URLs assessed</span>
+        <strong>{report.rollups?.urls_scanned ?? "Unknown"}</strong>
       </div>
       <p className="rail-note">Counts represent distinct issues, not every page where they appeared.</p>
     </section>
@@ -167,6 +178,7 @@ export function ReportView({ reloadKey }: { reloadKey: number }) {
   return (
     <div className="report-view">
       <RunPicker runs={runs} activeId={report.run_id} onPick={select} />
+      {report.rollups?.partial && <p className="form-error" role="status">Incomplete assessment. Failed or skipped checks may leave issues undetected.</p>}
       <RiskRail report={report} />
       <SeveritySummary report={report} />
       <FindingsRegister findings={report.findings || []} />

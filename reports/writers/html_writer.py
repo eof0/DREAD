@@ -4,6 +4,7 @@ import html
 from pathlib import Path
 from typing import Any
 
+from plain_language import assessment_incomplete, risk_summary
 from writers import cloud_storage_checked
 
 _SEVERITY_ORDER = ("critical", "high", "medium", "low", "info")
@@ -107,9 +108,20 @@ def write_suite_html(report: dict[str, Any], output_dir: Path, base_name: str) -
             f'<div><h5>Affected endpoints</h5><ul>{ep_html}</ul></div>{ev_html}</div></article>'
         )
 
-    vulns_html = "".join(_finding_block(f) for f in vulnerabilities) or (
-        "<p class='empty'>No vulnerabilities were identified.</p>"
+    incomplete = assessment_incomplete(roll.get("overall_risk", ""), bool(roll.get("partial")))
+    empty_vulns = (
+        "No vulnerabilities were confirmed. Coverage is incomplete, so this is not a clean result."
+        if incomplete else "No vulnerabilities were identified."
     )
+    vulns_html = "".join(_finding_block(f) for f in vulnerabilities) or (
+        f"<p class='empty'>{_esc(empty_vulns)}</p>"
+    )
+    summary = risk_summary(roll)
+    if summary:
+        summary_class = "notice" if incomplete else "riskline"
+        summary_html = f'<p class="{summary_class}">{_esc(summary)}</p>'
+    else:
+        summary_html = ""
     obs_html = "".join(_finding_block(f) for f in observations) or (
         "<p class='empty'>No observations recorded.</p>"
     )
@@ -163,6 +175,8 @@ def write_suite_html(report: dict[str, Any], output_dir: Path, base_name: str) -
   .meta h5 {{ margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #6a7080; }}
   .meta ul {{ margin: 0; padding-left: 16px; }}
   .empty {{ color: #6a7080; }}
+  .riskline {{ margin: 18px 0 0; }}
+  .notice {{ margin: 18px 0 0; padding: 12px 16px; background: #fff; border-left: 4px solid #8a5a12; }}
   .lead {{ color: #4a5060; margin: 0 0 10px; }}
   .counts {{ display: flex; gap: 32px; align-items: baseline; }}
   .counts .n {{ font-size: 40px; font-weight: 700; letter-spacing: -.03em; }}
@@ -187,6 +201,7 @@ def write_suite_html(report: dict[str, Any], output_dir: Path, base_name: str) -
     <div><span class="n obs">{_esc(obs_count)}</span><small>observation{'' if obs_count == 1 else 's'} (not vulnerabilities)</small></div>
   </div>
   <div class="chips">{chips}</div>
+  {summary_html}
   <h2>Assessment scope</h2>
   {scope_html}
   {checks_html}

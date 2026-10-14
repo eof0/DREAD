@@ -17,6 +17,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from plain_language import assessment_incomplete, risk_summary
 from writers import cloud_storage_checked
 
 
@@ -79,6 +80,10 @@ def write_suite_pdf(report: dict[str, Any], output_dir: Path, base_name: str) ->
     sev_line = ", ".join(f"{k}: {vbs.get(k, 0)}" for k in ("critical", "high", "medium", "low")
                          if vbs.get(k)) or "none"
     story.append(Paragraph(f"<b>Vulnerabilities by severity:</b> {escape(sev_line)}", styles["Normal"]))
+    summary = risk_summary(roll)
+    if summary:
+        story.append(Spacer(1, 0.08 * inch))
+        story.append(Paragraph(f"<b>{escape(summary)}</b>", styles["Normal"]))
 
     # Customer-facing: describe what was assessed, never which internal tool did it.
     src = report.get("sources") or {}
@@ -144,7 +149,12 @@ def write_suite_pdf(report: dict[str, Any], output_dir: Path, base_name: str) ->
     if vulnerabilities:
         story.append(_table(vulnerabilities))
     else:
-        story.append(Paragraph("No vulnerabilities were identified.", styles["Normal"]))
+        incomplete = assessment_incomplete(roll.get("overall_risk", ""), bool(roll.get("partial")))
+        empty = (
+            "No vulnerabilities were confirmed. Coverage is incomplete, so this is not a clean result."
+            if incomplete else "No vulnerabilities were identified."
+        )
+        story.append(Paragraph(escape(empty), styles["Normal"]))
 
     story.append(Spacer(1, 0.25 * inch))
     story.append(Paragraph(f"Observations ({len(observations)})", styles["Heading2"]))

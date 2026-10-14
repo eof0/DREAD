@@ -98,7 +98,8 @@ def _overall_risk(scans: list[dict[str, Any]]) -> str:
         for s in scans
     ]
     ranked = [lvl for lvl in levels if lvl in _RISK_ORDER]
-    return max(ranked, key=_RISK_ORDER.index, default="none")
+    level = max(ranked, key=_RISK_ORDER.index, default="none")
+    return "unknown" if "unknown" in levels and level == "none" else level
 
 
 def build_unified_report(
@@ -216,6 +217,9 @@ def build_unified_report(
         )
     )
     generated_at = _utc_now_iso()
+    scan_stats = [scan["statistics"] for scan in sources["probe"]["scans"]]
+    scores = [stats.get("risk", {}).get("normalized_score") for stats in scan_stats]
+    scores = [score for score in scores if isinstance(score, (int, float))]
     target = next(
         (s["target"] for s in sources["probe"]["scans"] if s["target"]),
         (sources["scope"]["summary"] or {}).get("domain") or "",
@@ -241,6 +245,9 @@ def build_unified_report(
                 for sev in VULNERABILITY_SEVERITIES
             },
             "overall_risk": _overall_risk(sources["probe"]["scans"]),
+            "risk_score": max(scores, default=None),
+            "partial": any(stats.get("partial", False) for stats in scan_stats),
+            "urls_scanned": sum(stats.get("urls_scanned", 0) for stats in scan_stats),
             "findings_by_plugin": dict(
                 sorted(findings_by_plugin.items(), key=lambda kv: -kv[1])
             ),

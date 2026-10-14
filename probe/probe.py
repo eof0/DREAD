@@ -139,7 +139,8 @@ def cmd_scan(args) -> int:
 
     try:
         report = engine.run_scan()
-        return 0
+        status = report.get("statistics", {}).get("status", "completed")
+        return 130 if status == "cancelled" else 0 if status == "completed" else 1
     except KeyboardInterrupt:
         print("\n[!] Scan interrupted by user", file=sys.stderr)
         return 130

@@ -615,7 +615,7 @@ def full_scan(target: str, args: argparse.Namespace) -> int:
                     proc.stderr or proc.stdout or "(no output)",
                     file=sys.stderr,
                 )
-        elif run_dir and out_name:
+        if run_dir and out_name:
             jp = run_dir / f"{out_name}.json"
             if jp.is_file():
                 probe_artifacts.append(jp)

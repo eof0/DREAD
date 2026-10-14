@@ -94,3 +94,30 @@ def test_risk_statement_for_clean_and_risky_results() -> None:
     label, sentence = risk_statement("high", 3)
     assert label == "High"
     assert "3 vulnerabilities" in sentence
+
+
+def test_risk_statement_does_not_clear_an_incomplete_assessment() -> None:
+    from plain_language import no_action_sentence, risk_statement, risk_summary
+
+    label, sentence = risk_statement("unknown", 0, partial=True)
+    assert label == "Incomplete"
+    assert "good shape" not in sentence
+    assert "not a clean result" in sentence
+
+    label, sentence = risk_statement("none", 0, partial=True)
+    assert label == "Incomplete"
+    assert "good shape" not in sentence
+
+    label, sentence = risk_statement("high", 2, partial=True)
+    assert label == "High"
+    assert "Coverage was incomplete" in sentence
+
+    assert "Nothing requiring action" not in no_action_sentence(overall_risk="unknown", partial=True)
+    assert risk_summary({"overall_risk": "unknown", "risk_score": None, "partial": True}) == (
+        "Incomplete assessment. Risk score: unrated."
+    )
+    assert risk_summary({"overall_risk": "critical", "risk_score": 95.0, "partial": True}) == (
+        "Incomplete assessment. Overall risk: critical. Risk score: 95."
+    )
+    assert risk_summary({"overall_risk": "none", "risk_score": 0}) == "Overall risk: none. Risk score: 0."
+    assert risk_summary({}) is None

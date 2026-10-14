@@ -42,3 +42,30 @@ jobs:
         run: npx tsc --noEmit
       - name: Build
         run: npm run build
+
+  dashboard-browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+      - name: Install Python dependencies
+        run: |
+          uv venv .venv
+          uv pip install -p .venv/bin/python -r requirements.txt -r requirements-dev.txt -r requirements-dom.txt
+          uv run --python .venv/bin/python --no-project python -m playwright install --with-deps chromium
+      - name: Build dashboard
+        working-directory: reports/dashboard
+        run: |
+          npm ci
+          npm run build
+      - name: Browser regressions
+        run: uv run --python .venv/bin/python --no-project pytest tests/test_dashboard_browser.py
+        env:
+          DREAD_TEST_BROWSER: "1"

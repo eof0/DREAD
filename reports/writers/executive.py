@@ -13,11 +13,20 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape as _xml_escape
 
-from plain_language import explain, risk_statement, urgency
+from plain_language import (
+    assessment_incomplete,
+    explain,
+    no_action_sentence,
+    risk_statement,
+    urgency,
+)
 
 _SEV_ORDER = ("critical", "high", "medium", "low")
 _SEV_COLOR = {"critical": "#b02a37", "high": "#c8582b", "medium": "#b8860b", "low": "#3f7d58"}
-_RISK_COLOR = {"Critical": "#b02a37", "High": "#c8582b", "Moderate": "#b8860b", "Low": "#3f7d58"}
+_RISK_COLOR = {
+    "Critical": "#b02a37", "High": "#c8582b", "Moderate": "#b8860b",
+    "Low": "#3f7d58", "Incomplete": "#8a5a12",
+}
 
 
 def _esc(value: Any) -> str:
@@ -58,8 +67,11 @@ def write_executive_html(report: dict[str, Any], output_dir: Path, base_name: st
 
     roll = report.get("rollups") or {}
     vuln_count = roll.get("vulnerability_count", 0)
-    label, sentence = risk_statement(roll.get("overall_risk", "none"), vuln_count)
+    overall = roll.get("overall_risk", "none")
+    partial = bool(roll.get("partial"))
+    label, sentence = risk_statement(overall, vuln_count, partial=partial)
     risk_color = _RISK_COLOR.get(label, "#3f7d58")
+    incomplete = assessment_incomplete(overall, partial)
 
     vuln_blocks: list[str] = []
     for f in _vulnerabilities(report):
@@ -79,10 +91,8 @@ def write_executive_html(report: dict[str, Any], output_dir: Path, base_name: st
     if vuln_blocks:
         vulns_html = "".join(vuln_blocks)
     else:
-        vulns_html = (
-            '<p class="clean">Nothing requiring action was found on the systems we tested. '
-            'The observations below are informational only.</p>'
-        )
+        kind = "gap" if incomplete else "clean"
+        vulns_html = f'<p class="{kind}">{_esc(no_action_sentence(overall_risk=overall, partial=partial))}</p>'
 
     obs = _observation_sentence(report)
     obs_html = f'<div class="obs"><h2>Other observations</h2><p>{_esc(obs)}</p></div>' if obs else ""
@@ -116,6 +126,7 @@ def write_executive_html(report: dict[str, Any], output_dir: Path, base_name: st
   .loc {{ color: #6a7080; font-size: 14px; }}
   .mono {{ font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }}
   .clean {{ background: #fff; border-left: 6px solid #3f7d58; padding: 16px 20px; }}
+  .gap {{ background: #fff; border-left: 6px solid #8a5a12; padding: 16px 20px; }}
   .obs {{ margin-top: 34px; }}
   .obs p {{ color: #4a5060; }}
   .method {{ margin-top: 40px; font-size: 14px; color: #6a7080; border-top: 1px solid #d8d8d4; padding-top: 16px; }}
@@ -151,6 +162,9 @@ def _methodology(report: dict[str, Any]) -> str:
     )
     if checks:
         base += f" {len(checks)} categories of checks were performed."
+    roll = report.get("rollups") or {}
+    if assessment_incomplete(roll.get("overall_risk", "none"), bool(roll.get("partial"))):
+        base += " Coverage is incomplete, so a quiet result does not show the systems are safe."
     return base + f" Generated {report.get('generated_at', '')}."
 
 
@@ -183,7 +197,9 @@ def write_executive_pdf(report: dict[str, Any], output_dir: Path, base_name: str
 
     roll = report.get("rollups") or {}
     vuln_count = roll.get("vulnerability_count", 0)
-    label, sentence = risk_statement(roll.get("overall_risk", "none"), vuln_count)
+    overall = roll.get("overall_risk", "none")
+    partial = bool(roll.get("partial"))
+    label, sentence = risk_statement(overall, vuln_count, partial=partial)
 
     doc = SimpleDocTemplate(str(pdf_path), pagesize=LETTER, rightMargin=54,
                             leftMargin=54, topMargin=54, bottomMargin=54)
@@ -216,7 +232,7 @@ def write_executive_pdf(report: dict[str, Any], output_dir: Path, base_name: str
 
     if not vuln_count:
         story.append(Paragraph(
-            "Nothing requiring action was found on the systems we tested.", body))
+            _xml_escape(no_action_sentence(overall_risk=overall, partial=partial)), body))
         story.append(Spacer(1, 0.14 * inch))
 
     obs = _observation_sentence(report)
