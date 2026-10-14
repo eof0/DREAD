@@ -229,8 +229,22 @@ def urgency(severity: str) -> str:
 _RISK_LABEL = {"critical": "Critical", "high": "High", "medium": "Moderate"}
 
 
-def risk_statement(overall_risk: str, vulnerability_count: int) -> tuple[str, str]:
+def assessment_incomplete(overall_risk: str, partial: bool = False) -> bool:
+    return bool(partial) or str(overall_risk or "").lower() == "unknown"
+
+
+def risk_statement(
+    overall_risk: str, vulnerability_count: int, *, partial: bool = False,
+) -> tuple[str, str]:
     """(label, sentence) describing overall risk for a non-technical reader."""
+    level = str(overall_risk or "none").lower()
+    incomplete = assessment_incomplete(level, partial)
+    if incomplete and vulnerability_count == 0:
+        return (
+            "Incomplete",
+            "The assessment did not fully cover the systems we were asked to test. "
+            "No vulnerabilities were confirmed, and this is not a clean result.",
+        )
     if vulnerability_count == 0:
         return (
             "Low",
@@ -238,8 +252,7 @@ def risk_statement(overall_risk: str, vulnerability_count: int) -> tuple[str, st
             "the systems we tested are in good shape.",
         )
     noun = "vulnerability" if vulnerability_count == 1 else "vulnerabilities"
-    level = overall_risk.lower()
-    label = _RISK_LABEL.get(level, "Low")
+    label = "Incomplete" if level == "unknown" else _RISK_LABEL.get(level, "Low")
     tail = {
         "critical": "including at least one an attacker could use to cause serious harm "
         "right away. Treat this as urgent.",
@@ -247,4 +260,40 @@ def risk_statement(overall_risk: str, vulnerability_count: int) -> tuple[str, st
         "not weeks.",
         "medium": "that should be fixed within the next month.",
     }.get(level, "none of which are urgent.")
-    return label, f"We found {vulnerability_count} {noun} {tail}"
+    sentence = f"We found {vulnerability_count} {noun} {tail}"
+    if incomplete:
+        sentence += " Coverage was incomplete, so further issues may remain."
+    return label, sentence
+
+
+def no_action_sentence(*, overall_risk: str = "none", partial: bool = False) -> str:
+    if assessment_incomplete(overall_risk, partial):
+        return (
+            "Nothing confirmed requires action, but the assessment is incomplete. "
+            "Unchecked systems may still have issues."
+        )
+    return (
+        "Nothing requiring action was found on the systems we tested. "
+        "The observations below are informational only."
+    )
+
+
+def risk_summary(rollups: dict[str, Any] | None) -> str | None:
+    """One line for technical reports. None when the report has no risk fields."""
+    roll = rollups or {}
+    if "risk_score" not in roll and "overall_risk" not in roll and not roll.get("partial"):
+        return None
+    level = str(roll.get("overall_risk") or "unknown")
+    score = roll.get("risk_score")
+    if score is None:
+        score_text = "unrated"
+    elif isinstance(score, float):
+        score_text = format(score, "g")
+    else:
+        score_text = str(score)
+    if assessment_incomplete(level, bool(roll.get("partial"))):
+        prefix = "Incomplete assessment."
+        if level not in {"", "none", "unknown"}:
+            prefix += f" Overall risk: {level}."
+        return f"{prefix} Risk score: {score_text}."
+    return f"Overall risk: {level}. Risk score: {score_text}."

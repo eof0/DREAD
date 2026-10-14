@@ -226,6 +226,26 @@ def test_overall_risk_is_the_worst_scan_level() -> None:
     assert _build([])["rollups"]["overall_risk"] == "none"
 
 
+def test_risk_contract_preserves_score_and_incomplete_coverage():
+    report = _build([("scan", {"scan_id": "s", "findings": [], "statistics": {
+        "status": "partial", "partial": True, "urls_scanned": 2,
+        "risk": {"level": "critical", "normalized_score": 95},
+    }})])
+    assert report["rollups"]["overall_risk"] == "critical"
+    assert report["rollups"]["risk_score"] == 95
+    assert report["rollups"]["partial"] is True
+    assert report["rollups"]["urls_scanned"] == 2
+
+
+def test_failed_assessment_has_unknown_risk():
+    report = _build([("scan", {"statistics": {
+        "status": "failed", "partial": True,
+        "risk": {"level": "unknown", "normalized_score": None},
+    }})])
+    assert report["rollups"]["overall_risk"] == "unknown"
+    assert report["rollups"]["risk_score"] is None
+
+
 def test_checks_performed_is_the_ordered_union_across_scans() -> None:
     def scan(scan_id, checks):
         return (scan_id, {"scan_id": scan_id, "target": f"https://{scan_id}.example", "findings": [],

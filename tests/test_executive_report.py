@@ -25,7 +25,7 @@ def _reports_path() -> None:
         pass
 
 
-def _report(vulns=(), observations=0, overall_risk="none"):
+def _report(vulns=(), observations=0, overall_risk="none", partial=False, risk_score=0):
     findings = list(vulns) + [
         {"severity": "info", "classification": "observation", "title": f"Obs {i}",
          "plugin_name": "network_scanner", "url": f"u{i}"}
@@ -49,6 +49,8 @@ def _report(vulns=(), observations=0, overall_risk="none"):
             "observation_count": observations,
             "vulnerabilities_by_severity": by_sev,
             "overall_risk": overall_risk,
+            "partial": partial,
+            "risk_score": risk_score,
             "findings_by_severity": {**by_sev, "info": observations},
         },
         "findings": findings,
@@ -80,6 +82,41 @@ def test_vulnerabilities_are_explained_in_plain_language_with_urgency(tmp_path):
     assert "SELECT" not in doc                 # no payloads/technical detail in the exec summary
     for name in INTERNAL_NAMES:
         assert name not in doc, name
+
+
+def test_incomplete_executive_html_does_not_sound_healthy(tmp_path):
+    from writers.executive import write_executive_html
+
+    doc = write_executive_html(
+        _report(overall_risk="unknown", partial=True, risk_score=None), tmp_path, "e",
+    ).read_text()
+
+    assert "Incomplete" in doc
+    assert "not a clean result" in doc
+    assert "assessment is incomplete" in doc
+    assert "good shape" not in doc
+    assert "Nothing requiring action was found" not in doc
+
+
+def test_incomplete_executive_pdf_does_not_sound_healthy(monkeypatch, tmp_path):
+    import reportlab.platypus as platypus
+    from writers.executive import write_executive_pdf
+
+    texts: list[str] = []
+    real = platypus.Paragraph
+
+    def recording(text, style, *args, **kwargs):
+        texts.append(text)
+        return real(text, style, *args, **kwargs)
+
+    monkeypatch.setattr(platypus, "Paragraph", recording)
+    write_executive_pdf(_report(overall_risk="unknown", partial=True, risk_score=None), tmp_path, "e")
+    joined = "\n".join(texts)
+
+    assert "Incomplete" in joined
+    assert "not a clean result" in joined
+    assert "good shape" not in joined
+    assert "Nothing requiring action was found" not in joined
 
 
 def test_executive_pdf_renders(tmp_path):

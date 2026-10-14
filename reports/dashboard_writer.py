@@ -67,4 +67,6 @@ def write_dashboard_bundle(
     index_html = dash_out / "index.html"
     if not index_html.is_file():
         return None, "dist/index.html missing after build"
+    html = index_html.read_text(encoding="utf-8")
+    index_html.write_text(html.replace("</head>", '<meta name="dread-mode" content="standalone"></head>'), encoding="utf-8")
     return index_html, None
