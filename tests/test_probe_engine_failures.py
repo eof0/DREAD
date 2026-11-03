@@ -58,3 +58,55 @@ def test_scan_records_coverage(monkeypatch, tmp_path, responses, broken, expecte
     if expected != "completed":
         assert stats["partial"] is True
         assert stats["check_errors"]
+
+
+def _engine(monkeypatch, tmp_path, plugin):
+    import scanner.engine as module
+
+    engine = ScanEngine(ScanConfig("http://localhost", output_dir=str(tmp_path), output_formats=["json"]))
+    monkeypatch.setattr(module, "check_and_notify", lambda: None)
+    monkeypatch.setattr(module, "refresh_asn_db_before_scan", lambda **_: None)
+    monkeypatch.setattr(engine, "load_plugins", lambda: engine.plugins.append(plugin))
+    engine.request_handler.get = lambda *_args, **_kwargs: None
+    engine.request_handler.post = lambda *_args, **_kwargs: None
+    return engine
+
+
+def test_unreachable_form_endpoint_is_partial_coverage(monkeypatch, tmp_path):
+    from plugins.web_vulnerabilities import WebVulnerabilitiesPlugin
+
+    monkeypatch.setattr("plugins.web_vulnerabilities.dom_xss.scan_dom", lambda _url: [])
+
+    class Page:
+        text = '<html><form action="/submit" method="post"><input name="q" value="1"></form></html>'
+        headers = {"Content-Type": "text/html"}
+        url = "http://localhost/"
+
+    engine = _engine(monkeypatch, tmp_path, WebVulnerabilitiesPlugin())
+    monkeypatch.setattr(engine.crawler, "crawl", lambda *_a, **_k: [{
+        "url": "http://localhost/", "response": Page(), "depth": 0,
+    }])
+    stats = engine.run_scan()["statistics"]
+    assert stats["status"] == "partial"
+    assert stats["checks"]["successful"] == 1
+    assert stats["check_errors"][0]["plugin"] == "web_vulnerabilities"
+    assert "http://localhost/submit" in stats["check_errors"][0]["error"]
+
+
+def test_unreachable_parameter_with_no_completed_check_fails(monkeypatch, tmp_path):
+    from plugins.web_vulnerabilities import WebVulnerabilitiesPlugin
+
+    class Page:
+        text = '{"q": "1"}'
+        headers = {"Content-Type": "application/json"}
+        url = "http://localhost/api?q=1"
+
+    engine = _engine(monkeypatch, tmp_path, WebVulnerabilitiesPlugin())
+    monkeypatch.setattr(engine.crawler, "crawl", lambda *_a, **_k: [{
+        "url": "http://localhost/api?q=1", "response": Page(), "depth": 0,
+    }])
+    stats = engine.run_scan()["statistics"]
+    assert stats["status"] == "failed"
+    assert stats["checks"]["successful"] == 0
+    assert stats["checks_performed"] == []
+    assert "web_vulnerabilities" == stats["check_errors"][0]["plugin"]

@@ -26,6 +26,7 @@ try:
 except ImportError:
     RICH_AVAILABLE = False
 
+from scanner.progress import task_progress
 from scanner.update_notifier import check_and_notify
 from scanner.asn_db_updater import refresh_asn_db_before_scan
 
@@ -85,10 +86,6 @@ class ColoredConsole:
         else:
             print(f"[!] {message}")
 
-    def wait_hint(self, message: str = "Please wait... still processing."):
-        """Print a yellow wait hint during long-running operations."""
-        self.warning(message)
-    
     def error(self, message: str):
         """Print error message."""
         if self.rich_console:
@@ -441,65 +438,70 @@ class ScanEngine:
                     future_to_task[future] = (plugin, url_info, time.monotonic())
             
             pending = set(future_to_task.keys())
-            while pending:
-                done, pending = wait(
-                    pending,
-                    timeout=5.0,
-                    return_when=FIRST_COMPLETED,
-                )
-
-                if self._cancelled:
-                    for fut in pending:
-                        fut.cancel()
-                    pending = set()
-                    break
-
-                if not done:
-                    status = _pending_plugin_status(pending, future_to_task)
-                    self.console.wait_hint(f"Still running: {status}")
-                    self.console.info(
-                        f"Progress: {completed_tasks}/{total_tasks} tasks complete "
-                        f"({len(pending)} still running)"
+            with task_progress(
+                description="Plugin scans",
+                total=total_tasks,
+                console=self.console.rich_console,
+            ) as advance:
+                while pending:
+                    done, pending = wait(
+                        pending,
+                        timeout=1.0,
+                        return_when=FIRST_COMPLETED,
                     )
-                    continue
 
-                for future in done:
-                    plugin, url_info, _ = future_to_task[future]
-                    completed_tasks += 1
+                    if self._cancelled:
+                        for fut in pending:
+                            fut.cancel()
+                        pending = set()
+                        break
 
-                    try:
-                        plugin_name, findings, error = future.result()
+                    if not done:
+                        advance(0, _pending_plugin_status(pending, future_to_task))
+                        continue
 
-                        if error:
-                            failed_plugins.append((plugin_name, url_info['url'], error))
-                            if url_info.get("response") is None:
-                                skipped_checks += 1
-                            self.console.error(
-                                f"[{completed_tasks}/{total_tasks}] {plugin_name} failed on {url_info['url']}: {error}"
-                            )
-                        else:
-                            successful_checks += 1
-                            performed.add(plugin_name)
-                            self.findings.extend(findings)
-                            if findings:
-                                self.console.plugin_result(plugin_name, len(findings))
-                                if self.verbose:
-                                    for finding in findings:
-                                        self.console.info(f"    [FINDING] {finding.severity.upper()}: {finding.title}")
-                                logger.info(f"{plugin_name} found {len(findings)} issues on {url_info['url']}")
+                    for future in done:
+                        plugin, url_info, _ = future_to_task[future]
+                        completed_tasks += 1
+                        advance(1)
+
+                        try:
+                            plugin_name, findings, error = future.result()
+
+                            if error:
+                                failed_plugins.append((plugin_name, url_info['url'], error))
+                                if url_info.get("response") is None:
+                                    skipped_checks += 1
+                                self.console.error(
+                                    f"[{completed_tasks}/{total_tasks}] {plugin_name} failed on {url_info['url']}: {error}"
+                                )
                             else:
-                                if self.verbose:
-                                    self.console.info(f"  [{completed_tasks}/{total_tasks}] {plugin_name} on {url_info['url']}: No issues")
-                                logger.debug(f"{plugin_name} found no issues on {url_info['url']}")
+                                failed_requests = list(getattr(findings, "failed_requests", ()) or ())
+                                checks_ran = getattr(findings, "checks_ran", not failed_requests)
+                                if failed_requests:
+                                    message = "Request failed: " + ", ".join(map(str, failed_requests))
+                                    failed_plugins.append((plugin_name, url_info["url"], message))
+                                    self.console.error(
+                                        f"[{completed_tasks}/{total_tasks}] {plugin_name} failed on {url_info['url']}: {message}"
+                                    )
+                                if not failed_requests or checks_ran:
+                                    successful_checks += 1
+                                    performed.add(plugin_name)
+                                self.findings.extend(findings)
+                                if findings:
+                                    self.console.plugin_result(plugin_name, len(findings))
+                                    if self.verbose:
+                                        for finding in findings:
+                                            self.console.info(f"    [FINDING] {finding.severity.upper()}: {finding.title}")
+                                    logger.info(f"{plugin_name} found {len(findings)} issues on {url_info['url']}")
+                                else:
+                                    if self.verbose:
+                                        self.console.info(f"  [{completed_tasks}/{total_tasks}] {plugin_name} on {url_info['url']}: No issues")
+                                    logger.debug(f"{plugin_name} found no issues on {url_info['url']}")
 
-                        if completed_tasks % 10 == 0 or completed_tasks == total_tasks:
-                            self.console.info(
-                                f"Progress: {completed_tasks}/{total_tasks} tasks complete"
-                            )
-
-                    except Exception as e:
-                        failed_plugins.append((plugin.get_name(), url_info['url'], str(e)))
-                        logger.error(f"Unexpected error processing task: {e}", exc_info=True)
+                        except Exception as e:
+                            failed_plugins.append((plugin.get_name(), url_info['url'], str(e)))
+                            logger.error(f"Unexpected error processing task: {e}", exc_info=True)
 
         canceller.__exit__(None, None, None)
         if self._cancelled:

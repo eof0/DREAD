@@ -923,11 +923,20 @@ def _update_cve_database_unlocked(
             eta_seconds = remaining / rate if rate > 0 else 0
             eta_str = f"{int(eta_seconds//60)}m{int(eta_seconds%60):02d}s" if rate > 0 else "unknown"
 
-            print(f"  Progress: {start_index}/{total_results} CVEs | "
-                  f"Rate: {rate:.1f}/s | ETA: {eta_str} | "
-                  f"Store: {store_time:.1f}s")
+            if total_results:
+                pct = min(100, (100 * start_index) // total_results)
+                filled = pct // 5
+                bar = "#" * filled + "-" * (20 - filled)
+                print(
+                    f"\r  NVD sync [{bar}] {start_index}/{total_results} CVEs | "
+                    f"{rate:.1f}/s | ETA {eta_str} | store {store_time:.1f}s",
+                    end="",
+                    flush=True,
+                )
 
             if start_index >= total_results:
+                if total_results:
+                    print()
                 break
 
             time.sleep(_nvd_inter_request_sleep(api_key))

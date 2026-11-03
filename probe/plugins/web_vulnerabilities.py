@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 from requests import Request
 from requests.exceptions import RequestException
 
-from plugins.base_plugin import BasePlugin, Finding
+from plugins.base_plugin import BasePlugin, Finding, PluginScan
 from scanner.active_checks import (
     command_injection,
     crlf,
@@ -239,6 +239,13 @@ def discover_post_targets(url: str, html: str) -> List[tuple[str, Dict]]:
     return targets
 
 
+def _scan_result(findings, coverage):
+    failed = coverage["failed_requests"]
+    if not failed:
+        return findings
+    return PluginScan(findings, failed_requests=failed, checks_ran=coverage["checks_ran"])
+
+
 class WebVulnerabilitiesPlugin(BasePlugin):
     def get_name(self) -> str:
         return "web_vulnerabilities"
@@ -252,7 +259,7 @@ class WebVulnerabilitiesPlugin(BasePlugin):
         if page is None:
             page = request_handler.get(page_url)
         if page is None:
-            return []
+            return PluginScan([], failed_requests=[page_url], checks_ran=False)
         content_type = page.headers.get("Content-Type", "").lower()
         is_html = "text/html" in content_type
         is_json = "json" in content_type
@@ -269,7 +276,11 @@ class WebVulnerabilitiesPlugin(BasePlugin):
             fn = request_handler.post if method.upper() == "POST" else request_handler.get
             return fn(**kwargs)
 
-        findings = dom_xss.scan_dom(response_url) if is_html else []
+        coverage = {"failed_requests": [], "checks_ran": False}
+        findings = []
+        if is_html:
+            findings = dom_xss.scan_dom(response_url)
+            coverage["checks_ran"] = True
         self._tested = 0
         # Aggressive mode fuzzes far more parameters per page (owned/authorized targets).
         self._max_parameters = MAX_PARAMETERS * 6 if url_info.get("aggressive") else MAX_PARAMETERS
@@ -293,12 +304,12 @@ class WebVulnerabilitiesPlugin(BasePlugin):
 
         for endpoint, params in get_targets:
             if not self._run_targets(endpoint, params, "GET", "query", _send,
-                                     request_handler, origin_states, findings):
-                return findings
+                                     request_handler, origin_states, findings, coverage):
+                return _scan_result(findings, coverage)
         for endpoint, params in post_targets:
             if not self._run_targets(endpoint, params, "POST", "form", _send,
-                                     request_handler, origin_states, findings):
-                return findings
+                                     request_handler, origin_states, findings, coverage):
+                return _scan_result(findings, coverage)
 
         # Browser-captured API: fuzz the real fetch/XHR the app makes — the true attack
         # surface of a JS/SPA. The crawler runs the browser once and hands the captured
@@ -311,9 +322,9 @@ class WebVulnerabilitiesPlugin(BasePlugin):
             for target in (captured or []):
                 if not self._run_targets(target["endpoint"], target["params"],
                                          target["method"], target["location"], _send,
-                                         request_handler, origin_states, findings):
-                    return findings
-        return findings
+                                         request_handler, origin_states, findings, coverage):
+                    return _scan_result(findings, coverage)
+        return _scan_result(findings, coverage)
 
     def _browser_targets(self, url: str, request_handler) -> List[Dict]:
         """Fuzz targets from the real requests a headless browser makes on the page."""
@@ -343,7 +354,7 @@ class WebVulnerabilitiesPlugin(BasePlugin):
         return captured_to_fuzz_targets(result.requests, allowed)
 
     def _run_targets(self, endpoint, params, method, location, send,
-                     request_handler, origin_states, findings) -> bool:
+                     request_handler, origin_states, findings, coverage) -> bool:
         """Inject into one endpoint's params. Returns False when the global budget is spent."""
         if location == "json":
             baseline = request_handler.post(endpoint, json=params, allow_redirects=False)
@@ -352,6 +363,7 @@ class WebVulnerabilitiesPlugin(BasePlugin):
         else:
             baseline = request_handler.get(endpoint, params=params, allow_redirects=False)
         if baseline is None:
+            coverage["failed_requests"].append(endpoint)
             return True
         baseline_sql = {
             pattern.pattern
@@ -381,6 +393,8 @@ class WebVulnerabilitiesPlugin(BasePlugin):
         if available <= 0:
             return False
         to_test = param_names[:available]
+        if to_test:
+            coverage["checks_ran"] = True
         self._tested += len(to_test)
         budget_exhausted = len(to_test) < len(param_names)
 

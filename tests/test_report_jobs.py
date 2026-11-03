@@ -1,5 +1,6 @@
 import json
 import os
+import pathlib
 import signal
 import subprocess
 import sys
@@ -163,3 +164,84 @@ def test_shutdown_cancels_running_jobs(tmp_path):
     wait_for(lambda: manager.get(job["id"])["status"] == "running")
     manager.close()
     assert manager.get(job["id"])["status"] == "cancelled"
+
+
+def _hide_proc(monkeypatch):
+    real_read = pathlib.Path.read_text
+
+    def read_text(self, *args, **kwargs):
+        if str(self).startswith("/proc/"):
+            raise OSError("procfs unavailable")
+        return real_read(self, *args, **kwargs)
+
+    monkeypatch.setattr(pathlib.Path, "read_text", read_text)
+
+
+def test_process_start_uses_ps_when_proc_is_missing(monkeypatch):
+    _hide_proc(monkeypatch)
+    proc = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True,
+    )
+    try:
+        token = process_start(proc.pid)
+        assert token
+        assert token == process_start(proc.pid)
+        assert not token.isdigit()
+    finally:
+        if proc.poll() is None:
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait(timeout=2)
+
+
+def test_restart_reaps_when_proc_start_is_unavailable(tmp_path, monkeypatch):
+    _hide_proc(monkeypatch)
+    marker = tmp_path / "orphan-lived"
+    child = (
+        "import time; from pathlib import Path; "
+        f"time.sleep(30); Path({str(marker)!r}).write_text('x')"
+    )
+    parent = subprocess.Popen(
+        [sys.executable, "-c",
+         "import subprocess, sys, time; "
+         f"subprocess.Popen([sys.executable, '-c', {child!r}]); "
+         "time.sleep(60)"],
+        start_new_session=True,
+    )
+    try:
+        started = process_start(parent.pid)
+        assert started
+        folder = tmp_path / "stuck"
+        folder.mkdir()
+        (folder / "job.json").write_text(json.dumps({
+            "id": "stuck", "kind": "scan", "status": "running",
+            "pid": parent.pid, "process_start": started,
+        }))
+        with JobManager(tmp_path) as manager:
+            assert manager.get("stuck")["status"] == "interrupted"
+        parent.wait(timeout=2)
+        assert not marker.exists()
+    finally:
+        if parent.poll() is None:
+            os.killpg(parent.pid, signal.SIGKILL)
+            parent.wait(timeout=2)
+
+
+def test_second_manager_does_not_take_a_live_runs_directory(tmp_path):
+    owner = JobManager(tmp_path, workers=1, timeout=30)
+    try:
+        job = owner.submit("test", command("import time; time.sleep(30)"))
+        wait_for(lambda: owner.get(job["id"])["status"] == "running")
+        pid = json.loads((tmp_path / job["id"] / "job.json").read_text())["pid"]
+        with pytest.raises(RuntimeError):
+            JobManager(tmp_path)
+        assert owner.get(job["id"])["status"] == "running"
+        os.kill(pid, 0)
+    finally:
+        owner.close()
+
+
+def test_directory_can_be_claimed_after_owner_stops(tmp_path):
+    with JobManager(tmp_path):
+        pass
+    with JobManager(tmp_path) as manager:
+        assert manager.list() == []

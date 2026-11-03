@@ -538,3 +538,23 @@ def test_active_plugin_resolves_forms_from_same_origin_final_url():
     assert {url for url, _kwargs in handler.calls} == {
         "https://example.test/redirected/danger"
     }
+
+
+def test_unreachable_form_endpoint_is_reported_separately(monkeypatch):
+    monkeypatch.setattr("plugins.web_vulnerabilities.dom_xss.scan_dom", lambda _url: [])
+    html = '<html><form action="/submit" method="post"><input name="q" value="a"></form></html>'
+    page = response(html)
+    page.url = "https://example.test/"
+
+    class DeadEndpoint(Handler):
+        def post(self, *_args, **_kwargs):
+            return None
+
+    findings = WebVulnerabilitiesPlugin().scan(
+        {"url": "https://example.test/", "depth": 0, "response": page},
+        DeadEndpoint(),
+    )
+
+    assert list(findings) == []
+    assert findings.failed_requests == ["https://example.test/submit"]
+    assert findings.checks_ran is True

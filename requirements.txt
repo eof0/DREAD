@@ -21,6 +21,9 @@ langchain-anthropic>=0.2.0
 #     xAI, vLLM/LM Studio, ...) .. pip install langchain-openai
 #   Google Gemini ................ pip install langchain-google-genai
 
+# Terminal progress and scan summaries
+rich>=13.0.0
+
 # HTML parsing
 beautifulsoup4>=4.11.0
 

@@ -73,6 +73,15 @@ class Finding:
         }
 
 
+class PluginScan(list):
+    """Findings plus requests that returned nothing, so coverage can see the gap."""
+
+    def __init__(self, findings=(), *, failed_requests=(), checks_ran=False):
+        super().__init__(findings)
+        self.failed_requests = list(failed_requests)
+        self.checks_ran = checks_ran
+
+
 class BasePlugin(ABC):
     version = "1.0.0"
 

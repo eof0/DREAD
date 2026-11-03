@@ -128,12 +128,27 @@ def _scan_command(job_dir: Path, target: str, max_subdomains: int) -> list[str]:
     ]
 
 
+def _wholly_failed(report: dict) -> bool:
+    scans = ((report.get("sources") or {}).get("probe") or {}).get("scans") or []
+    stats = [scan.get("statistics") or {} for scan in scans if isinstance(scan, dict)]
+    if not stats:
+        return False
+    statuses = [item.get("status") for item in stats]
+    if any(status not in (None, "failed") for status in statuses):
+        return False
+    if all(status == "failed" for status in statuses):
+        return True
+    return all(((item.get("checks") or {}).get("successful") or 0) == 0 for item in stats)
+
+
 def _scan_finalize(job_dir: Path, return_code: int) -> dict:
     report_path = _latest_report(job_dir)
     status = "completed" if return_code == 0 and report_path else "failed"
     if report_path:
         report = json.loads(report_path.read_text(encoding="utf-8"))
-        if report.get("rollups", {}).get("partial"):
+        if _wholly_failed(report):
+            status = "failed"
+        elif report.get("rollups", {}).get("partial"):
             status = "partial"
     return {"status": status, "report_path": str(report_path) if report_path else None,
             "report_id": job_dir.name if report_path else None}

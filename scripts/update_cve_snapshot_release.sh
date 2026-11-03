@@ -4,17 +4,19 @@ set -euo pipefail
 dist_dir="${1:-dist}"
 artifact="${dist_dir}/cve_db.sqlite.gz"
 manifest="${dist_dir}/manifest.json"
-dated_tag="cve-db-$(date -u +%Y-%m-%d)"
 stable_tag="cve-db-latest"
+previous_manifest="${PREVIOUS_MANIFEST:-}"
 
 test -f "${artifact}"
 test -f "${manifest}"
 
-if ! gh release view "${dated_tag}" >/dev/null 2>&1; then
-  gh release create "${dated_tag}" "${artifact}" "${manifest}" \
-    --title "CVE DB snapshot ${dated_tag}" \
-    --notes "Automated daily CVE database snapshot" \
-    --latest=false
+if [[ -n "${previous_manifest}" && -f "${previous_manifest}" ]]; then
+  new_hash="$(python3 -c "import json; print(json.load(open('${manifest}'))['sha256_gz'])")"
+  old_hash="$(python3 -c "import json; print(json.load(open('${previous_manifest}'))['sha256_gz'])")"
+  if [[ "${new_hash}" == "${old_hash}" ]]; then
+    echo "CVE snapshot unchanged; skipping release upload"
+    exit 0
+  fi
 fi
 
 if gh release view "${stable_tag}" >/dev/null 2>&1; then

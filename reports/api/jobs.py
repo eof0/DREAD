@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import codecs
+import fcntl
 import json
 import os
 import queue
@@ -23,14 +24,30 @@ class QueueFull(RuntimeError):
     pass
 
 
-def process_start(pid: int) -> str | None:
-    """Linux start-time token so a recycled pid is not treated as this job."""
+def _linux_start(pid: int) -> str | None:
     try:
         text = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
     except OSError:
         return None
     tail = text.rsplit(")", 1)[-1].split()
     return tail[19] if len(tail) > 19 else None
+
+
+def _ps_start(pid: int) -> str | None:
+    try:
+        output = subprocess.check_output(
+            ["ps", "-p", str(int(pid)), "-o", "lstart="],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        return None
+    return output.strip() or None
+
+
+def process_start(pid: int) -> str | None:
+    """Start-time token so a recycled pid is not treated as this job."""
+    return _linux_start(pid) or _ps_start(pid)
 
 
 def reap_process_group(pid, started) -> None:
@@ -49,6 +66,8 @@ class JobManager:
     def __init__(self, directory: Path, *, workers=2, queue_size=8, timeout=3600, cwd=None):
         self.directory = directory
         directory.mkdir(parents=True, exist_ok=True)
+        self._lock_file = None
+        self._claim_directory()
         self.timeout = timeout
         self.cwd = cwd
         self.lock = threading.RLock()
@@ -70,6 +89,28 @@ class JobManager:
         self.workers = [threading.Thread(target=self._work, daemon=True) for _ in range(max(1, workers))]
         for worker in self.workers:
             worker.start()
+
+    def _claim_directory(self):
+        handle = (self.directory / ".dread-jobs.lock").open("a+")
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            handle.close()
+            raise RuntimeError(
+                f"Another DREAD process is using this runs directory: {self.directory}"
+            ) from exc
+        self._lock_file = handle
+
+    def _release_directory(self):
+        handle = self._lock_file
+        self._lock_file = None
+        if handle is None:
+            return
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            pass
+        handle.close()
 
     def _update(self, job_id, **changes):
         with self.lock:
@@ -262,6 +303,7 @@ class JobManager:
                 self.cancel(job_id)
         for worker in self.workers:
             worker.join()
+        self._release_directory()
 
     def __enter__(self):
         return self

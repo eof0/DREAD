@@ -58,6 +58,14 @@ from suite_run import (
 )
 
 DREAD_DIR = Path(__file__).parent.resolve()
+_PROBE_PKG = DREAD_DIR / "probe"
+if str(_PROBE_PKG) not in sys.path:
+    sys.path.insert(0, str(_PROBE_PKG))
+
+try:
+    from scanner.progress import heartbeat as _progress_heartbeat
+except ImportError:
+    _progress_heartbeat = None
 _SCOPE = product_by_cli("scope")
 _PROBE = product_by_cli("probe")
 _DREADAI = product_by_cli("dreadai")
@@ -79,7 +87,7 @@ def _run_with_heartbeat(
     capture_stderr: bool,
     env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess:
-    """Run a child process and print periodic status while it is still running."""
+    """Run a child process with a single in-place progress line on stderr."""
     proc = subprocess.Popen(
         cmd,
         cwd=str(cwd),
@@ -88,14 +96,14 @@ def _run_with_heartbeat(
         text=True,
         env=env,
     )
-    started = time.monotonic()
-    next_tick = started + 5.0
-    while proc.poll() is None:
-        if not quiet and time.monotonic() >= next_tick:
-            elapsed = int(time.monotonic() - started)
-            print(f"[*] {label} still running... {elapsed}s elapsed", file=sys.stderr)
-            next_tick += 5.0
-        time.sleep(0.2)
+    if _progress_heartbeat is None or quiet:
+        while proc.poll() is None:
+            time.sleep(0.2)
+    else:
+        with _progress_heartbeat(label, quiet=quiet) as tick:
+            while proc.poll() is None:
+                tick()
+                time.sleep(0.15)
     stdout_data, stderr_data = proc.communicate()
     return subprocess.CompletedProcess(
         args=cmd,
