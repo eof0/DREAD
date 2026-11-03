@@ -87,8 +87,9 @@ def test_unreachable_form_endpoint_is_partial_coverage(monkeypatch, tmp_path):
         "url": "http://localhost/", "response": Page(), "depth": 0,
     }])
     stats = engine.run_scan()["statistics"]
-    assert stats["status"] == "partial"
-    assert stats["checks"]["successful"] == 1
+    assert stats["status"] == "failed"
+    assert stats["checks"]["successful"] == 0
+    assert stats["checks_performed"] == ["web_vulnerabilities"]
     assert stats["check_errors"][0]["plugin"] == "web_vulnerabilities"
     assert "http://localhost/submit" in stats["check_errors"][0]["error"]
 

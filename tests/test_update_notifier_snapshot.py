@@ -20,3 +20,16 @@ def test_scan_time_update_uses_snapshot_policy(monkeypatch) -> None:
     notifier.check_and_notify(auto_update=True)
 
     policy.assert_called_once_with(verbose=False)
+
+
+def test_scan_time_update_skips_when_cve_prechecked(monkeypatch) -> None:
+    import scanner.update_notifier as notifier
+
+    monkeypatch.setenv("DREAD_CVE_PRECHECKED", "1")
+    monkeypatch.setattr(notifier, "cve_db_needs_update", lambda: True)
+    policy = mock.Mock()
+    monkeypatch.setattr(notifier, "update_with_snapshot_policy", policy)
+
+    notifier.check_and_notify(auto_update=True)
+
+    policy.assert_not_called()

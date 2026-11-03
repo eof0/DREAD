@@ -64,10 +64,13 @@ class SecurityHeadersPlugin(BasePlugin):
         if verbose:
             print(f"[VERBOSE] [security_headers] Checking headers for {url}")
 
-        response = request_handler.get(url)
+        response = url_info.get("response") or request_handler.get(url)
         if response is None:
             if verbose:
                 print(f"[VERBOSE] [security_headers] No response from {url}")
+            return findings
+
+        if "text/html" not in response.headers.get("Content-Type", "").lower():
             return findings
 
         headers = response.headers

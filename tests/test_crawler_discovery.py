@@ -57,6 +57,22 @@ def test_seed_urls_reads_robots_and_sitemap():
     assert "https://example.test/login" in seeds
 
 
+def test_seed_urls_parses_namespaced_sitemap_without_html_parser_warning():
+    base = "https://example.test/"
+    ns = "http://www.sitemaps.org/schemas/sitemap/0.9"
+    pages = {
+        "https://example.test/robots.txt": FakeResponse("", status=404, content_type="text/plain"),
+        "https://example.test/sitemap.xml": FakeResponse(
+            f'<?xml version="1.0" encoding="UTF-8"?>'
+            f'<urlset xmlns="{ns}"><url><loc>https://example.test/namespaced</loc></url></urlset>',
+            content_type="application/xml",
+        ),
+    }
+    crawler = Crawler(base, max_depth=2, max_urls=50)
+    seeds = crawler.seed_urls(SeedHandler(pages))
+    assert "https://example.test/namespaced" in seeds
+
+
 def test_seed_urls_follows_sitemap_index():
     base = "https://example.test/"
     pages = {

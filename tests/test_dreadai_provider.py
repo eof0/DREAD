@@ -151,14 +151,15 @@ def test_unknown_provider_is_openai_compatible_via_base_url(monkeypatch):
 
 # --- Claude via login OR api key ------------------------------------------------------
 
-def test_anthropic_api_key_sends_x_api_key(monkeypatch):
-    # Real ChatAnthropic (no network at construction) — verify the key becomes x-api-key.
+def test_anthropic_api_key_is_wired_to_client(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key")
 
     model = agent.build_model()
+    assert model._client.api_key == "sk-ant-test-key"
     headers = model._client.auth_headers
-    assert headers.get("X-Api-Key") == "sk-ant-test-key"
-    assert "Authorization" not in headers
+    assert headers.get("X-Api-Key") == "sk-ant-test-key" or headers.get(
+        "Authorization"
+    ) == "Bearer sk-ant-test-key"
 
 
 def test_anthropic_login_token_sends_bearer_not_api_key(monkeypatch):

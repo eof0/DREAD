@@ -312,6 +312,7 @@ def run_probe(
         env = dict(os.environ)
     if skip_asn_refresh:
         env["DREAD_ASN_PRECHECKED"] = "1"
+        env["DREAD_CVE_PRECHECKED"] = "1"
     if staged_output:
         env["DREAD_STAGED_OUTPUT"] = "1"
 
