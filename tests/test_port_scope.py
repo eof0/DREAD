@@ -65,3 +65,65 @@ def test_network_scanner_defaults_to_top100_without_scope(monkeypatch):
 
     ns.NetworkScannerPlugin().scan({"url": "http://localhost:3007/", "depth": 0}, _Handler())
     assert captured["ports"] == "top100"
+
+
+def test_header_only_cdn_still_reports_exposed_services(monkeypatch):
+    import plugins.network_scanner as ns
+
+    class FakeScanner:
+        engine = "fake"
+
+        def __init__(self, ports="top100", **kw):
+            pass
+
+        def scan(self, host):
+            return [{"port": 22, "response_time_ms": 1}, {"port": 443, "response_time_ms": 1}]
+
+    class _Resp:
+        headers = {"cf-ray": "abc", "server": "cloudflare"}
+
+    class _Handler:
+        def get(self, url, **kw):
+            return _Resp()
+
+    monkeypatch.setattr(ns, "NetworkScanner", FakeScanner)
+    plugin = ns.NetworkScannerPlugin()
+    monkeypatch.setattr(plugin, "_is_cloudflare_ip", lambda ip: False)
+    monkeypatch.setattr(plugin, "_validate_service", lambda host, port, service: True)
+    monkeypatch.setattr(ns.socket, "gethostbyname", lambda host: "203.0.113.10")
+
+    findings = plugin.scan({"url": "https://example.test/", "depth": 0}, _Handler())
+    titles = [f.title for f in findings]
+    assert any(t.startswith("EXPOSED: SSH") for t in titles)
+    assert not any(t.startswith("Protected by") for t in titles)
+
+
+def test_confirmed_cdn_edge_skips_origin_service_noise(monkeypatch):
+    import plugins.network_scanner as ns
+
+    class FakeScanner:
+        engine = "fake"
+
+        def __init__(self, ports="top100", **kw):
+            pass
+
+        def scan(self, host):
+            return [{"port": 22, "response_time_ms": 1}, {"port": 443, "response_time_ms": 1}]
+
+    class _Resp:
+        headers = {"cf-ray": "abc", "server": "cloudflare"}
+
+    class _Handler:
+        def get(self, url, **kw):
+            return _Resp()
+
+    monkeypatch.setattr(ns, "NetworkScanner", FakeScanner)
+    plugin = ns.NetworkScannerPlugin()
+    monkeypatch.setattr(plugin, "_is_cloudflare_ip", lambda ip: True)
+    monkeypatch.setattr(plugin, "_validate_service", lambda host, port, service: True)
+    monkeypatch.setattr(ns.socket, "gethostbyname", lambda host: "104.16.1.1")
+
+    findings = plugin.scan({"url": "https://example.test/", "depth": 0}, _Handler())
+    titles = [f.title for f in findings]
+    assert any(t.startswith("Protected by") for t in titles)
+    assert not any(t.startswith("EXPOSED:") for t in titles)

@@ -50,6 +50,9 @@ class SecurityHeadersPlugin(BasePlugin):
     # Marks every finding as an informational hardening recommendation.
     _HARDENING_METADATA = {"classification": "warning", "category": "hardening"}
 
+    # Framing/CSP apply to HTML documents; HSTS and nosniff apply to any HTTPS response.
+    _PAGE_ONLY_HEADERS = frozenset({"X-Frame-Options", "Content-Security-Policy"})
+
     def get_name(self) -> str:
         return "security_headers"
 
@@ -64,13 +67,14 @@ class SecurityHeadersPlugin(BasePlugin):
         if verbose:
             print(f"[VERBOSE] [security_headers] Checking headers for {url}")
 
-        response = request_handler.get(url)
+        response = url_info.get("response") or request_handler.get(url)
         if response is None:
             if verbose:
                 print(f"[VERBOSE] [security_headers] No response from {url}")
             return findings
 
         headers = response.headers
+        is_html = "text/html" in headers.get("Content-Type", "").lower()
         found_headers = list(headers.keys())
 
         if verbose:
@@ -78,6 +82,8 @@ class SecurityHeadersPlugin(BasePlugin):
             print(f"[VERBOSE] [security_headers] Found headers: {', '.join(found_headers[:10])}{'...' if len(found_headers) > 10 else ''}")
 
         for header, info in self.REQUIRED_HEADERS.items():
+            if header in self._PAGE_ONLY_HEADERS and not is_html:
+                continue
             if header not in headers:
                 if header == "Strict-Transport-Security" and not url.startswith("https"):
                     if verbose:
@@ -103,7 +109,7 @@ class SecurityHeadersPlugin(BasePlugin):
                 if verbose:
                     print(f"[VERBOSE] [security_headers] PRESENT: {header} = {headers[header][:50]}..." if len(str(headers[header])) > 50 else f"[VERBOSE] [security_headers] PRESENT: {header} = {headers[header]}")
 
-        if "X-Frame-Options" in headers:
+        if is_html and "X-Frame-Options" in headers:
             value = headers["X-Frame-Options"].upper()
             if value not in ["DENY", "SAMEORIGIN"]:
                 if verbose:

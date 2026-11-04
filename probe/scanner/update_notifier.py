@@ -29,6 +29,9 @@ def check_and_notify(auto_update: bool = True):
     - Otherwise prints a loud reminder
     """
 
+    if os.environ.get("DREAD_CVE_PRECHECKED", "").strip() == "1":
+        return
+
     if not cve_db_needs_update():
         return
 

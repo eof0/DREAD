@@ -484,8 +484,10 @@ class ScanEngine:
                                     self.console.error(
                                         f"[{completed_tasks}/{total_tasks}] {plugin_name} failed on {url_info['url']}: {message}"
                                     )
-                                if not failed_requests or checks_ran:
+                                if not failed_requests:
                                     successful_checks += 1
+                                    performed.add(plugin_name)
+                                elif checks_ran:
                                     performed.add(plugin_name)
                                 self.findings.extend(findings)
                                 if findings:

@@ -140,8 +140,8 @@ def build_model():
 
 
 def _build_anthropic(model: str):
-    """Claude via API key *or* login. An ANTHROPIC_API_KEY sends x-api-key; otherwise a
-    login/OAuth bearer token (ANTHROPIC_AUTH_TOKEN) is sent as Authorization: Bearer."""
+    """Claude via API key *or* login. ANTHROPIC_API_KEY uses the Anthropic client key;
+    login/OAuth (ANTHROPIC_AUTH_TOKEN) sends Authorization: Bearer without x-api-key."""
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     token = (os.environ.get("ANTHROPIC_AUTH_TOKEN")
              or os.environ.get("DREADAI_ANTHROPIC_AUTH_TOKEN"))

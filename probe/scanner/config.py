@@ -142,7 +142,7 @@ class ScanConfig:
         # Precedence for each setting: explicit argument > profile value > built-in
         # default. Passing None means "not specified", so an explicit --depth always
         # wins over a --profile, and a profile always wins over the hard default.
-        profile_config = self._get_profile_config(profile)
+        profile_config = self._get_profile_config(profile or "standard")
 
         def _resolve(value, key, default):
             if value is not None:
@@ -182,42 +182,13 @@ class ScanConfig:
             None if active_scan_mode == "safe" else active_scan_mode, "active_scan_mode", active_scan_mode
         )
         
-        # Use profile plugins or default to all
         if enabled_plugins:
             self.enabled_plugins = enabled_plugins
-        elif profile:
-            self.enabled_plugins = profile_config.get("enabled_plugins", [
-                "fingerprinting",
-                "security_headers",
-                "sensitive_files",
-                "wordpress_scan",
-                "web_vulnerabilities",
-                "access_control",
-                "auth_bypass",
-                "cve_correlation",
-                "api_discovery",
-                "cors_check",
-                "misconfiguration",
-                "network_scanner",
-                "tls_analysis",
-                "infrastructure",
-            ])
         else:
-            self.enabled_plugins = [
-                "fingerprinting",
-                "security_headers",
-                "sensitive_files",
-                "wordpress_scan",
-                "web_vulnerabilities",
-                "access_control",
-                "auth_bypass",
-                "cve_correlation",
-                "api_discovery",
-                "cors_check",
-                "misconfiguration",
-                "network_scanner",
-                "tls_analysis",
-            ]
+            self.enabled_plugins = profile_config.get(
+                "enabled_plugins",
+                SCAN_PROFILES["standard"]["enabled_plugins"],
+            )
 
     def _get_profile_config(self, profile: Optional[str]) -> Dict[str, Any]:
         """Get configuration for a named profile."""

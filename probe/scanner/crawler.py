@@ -1,5 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin, urlparse, parse_qs, urlencode
+from xml.etree import ElementTree as ET
+
 from bs4 import BeautifulSoup
 from typing import Set, List, Dict
 import re
@@ -13,6 +15,36 @@ _JS_REL_RE = re.compile(r"""["'`]([A-Za-z0-9_\-]+(?:/[A-Za-z0-9_\-]+)+(?:\?[A-Za
 
 # Common application routes that are frequently NOT linked from the landing page but
 # carry real attack surface. Probed during content discovery so the plugins reach them.
+def _local_tag(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1].lower()
+
+
+def _parse_sitemap(text: str) -> tuple[list[str], bool]:
+    """Return page <loc> URLs and whether the doc is a sitemap index.
+
+    Only direct children of <url> / <sitemap> are used so <image:loc> and
+    other extension locs are ignored.
+    """
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError:
+        return [], False
+    root_name = _local_tag(root.tag)
+    is_index = root_name == "sitemapindex"
+    parent_name = "sitemap" if is_index else "url"
+    locs: list[str] = []
+    for parent in root.iter():
+        if _local_tag(parent.tag) != parent_name:
+            continue
+        for child in list(parent):
+            if _local_tag(child.tag) == "loc":
+                loc = (child.text or "").strip()
+                if loc:
+                    locs.append(loc)
+                break
+    return locs, is_index
+
+
 COMMON_ROUTES = (
     "/login", "/signin", "/logout", "/register", "/signup", "/forgot", "/reset",
     "/redirect", "/account", "/profile", "/settings", "/admin", "/dashboard",
@@ -413,11 +445,9 @@ class Crawler:
             resp = request_handler.get(sm)
             if resp is None or getattr(resp, "status_code", 0) != 200:
                 continue
-            # html.parser (not "xml") so we don't depend on lxml; it still finds <loc>.
             text = resp.text or ""
-            soup = BeautifulSoup(text, "html.parser")
-            locs = [loc.get_text(strip=True) for loc in soup.find_all("loc")]
-            if "<sitemapindex" in text.lower():
+            locs, is_index = _parse_sitemap(text)
+            if is_index:
                 self._collect_sitemaps(locs, request_handler, add, seen, _depth + 1)
             else:
                 for loc in locs:

@@ -220,37 +220,44 @@ class NetworkScannerPlugin(BasePlugin):
                     )
                 )
             
-            # Non-web ports on CDN IP are suspicious
-            for port_info in origin_ports_found:
-                port = port_info["port"]
-                service, _ = self.ORIGIN_PORTS.get(port, ("Unknown", "medium"))
-                
-                # Validate it's actually the service
-                if self._validate_service(ip, port, service):
-                    findings.append(
-                        Finding(
-                            plugin_name=self.get_name(),
-                            severity="critical",
-                            title=f"ORIGIN LEAKED: {service} exposed through CDN",
-                            description=f"{service} on port {port} is accessible on the CDN IP. This suggests origin exposure.",
-                            url=f"{ip}:{port}",
-                            evidence={
-                                "port": port,
-                                "service": service,
-                                "cdn_ip": ip,
-                                "provider": provider_name,
-                                "validated": True,
-                            },
-                            metadata={
-                                "actual_risk": True,
-                                "origin_leaked": True,
-                            },
-                            remediation=f"Block port {port} at firewall. Only allow CDN IPs to access origin.",
+            # Origin-port probes: only suppress on confirmed CDN edge IPs.
+            # Header-only CDN hints (cf-ray, via, server) can appear on direct hosts.
+            if not is_cf_ip:
+                for port_info in origin_ports_found:
+                    port = port_info["port"]
+                    service, severity = self.ORIGIN_PORTS.get(port, ("Unknown", "medium"))
+                    if self._validate_service(ip, port, service):
+                        findings.append(
+                            Finding(
+                                plugin_name=self.get_name(),
+                                severity=severity,
+                                title=f"EXPOSED: {service} on port {port}",
+                                description=(
+                                    f"{service} is directly accessible. CDN headers were "
+                                    f"present ({provider_name}) but the resolved IP is not "
+                                    f"a confirmed edge range."
+                                ),
+                                url=f"{ip}:{port}",
+                                evidence={
+                                    "port": port,
+                                    "service": service,
+                                    "validated": True,
+                                    "cdn_headers": provider_name,
+                                    "cdn_ip_confirmed": False,
+                                    "response_time_ms": port_info.get("response_time_ms", 0),
+                                },
+                                metadata={
+                                    "actual_risk": True,
+                                    "origin_leaked": True,
+                                    "edge_infrastructure": False,
+                                },
+                                remediation=(
+                                    f"Block port {port} in firewall or restrict to trusted IPs."
+                                ),
+                            )
                         )
-                    )
-            
-            # Summary finding if no issues
-            if not any(f.metadata.get("origin_leaked") for f in findings):
+
+            if is_cf_ip and not any(f.metadata.get("origin_leaked") for f in findings):
                 findings.append(
                     Finding(
                         plugin_name=self.get_name(),

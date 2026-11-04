@@ -192,10 +192,14 @@ class APIDiscoveryPlugin(BasePlugin):
         findings = []
         
         url = url_info["url"]
-        response = request_handler.get(url)
+        response = url_info.get("response") or request_handler.get(url)
         if response is None:
             return findings
-        
+
+        content_type = response.headers.get("Content-Type", "").lower()
+        if url.rstrip("/").endswith("/rss.xml") or "rss" in content_type:
+            return findings
+
         # Only check root URLs for documentation
         if url_info.get("depth", 0) == 0:
             # Search for API documentation
