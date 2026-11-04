@@ -70,13 +70,28 @@ def test_run_probe_marks_staged_output_so_probe_skips_temp_paths(monkeypatch) ->
     import dread
 
     seen = {}
-    monkeypatch.setattr(dread, "_run_with_heartbeat", lambda cmd, **kw: seen.update(kw))
+    monkeypatch.setattr(dread, "_run_with_heartbeat", lambda cmd, **kw: seen.update(kw) or type("R", (), {"returncode": 0})())
 
     dread.run_probe("example.com", output_dir="/tmp/x", staged_output=True)
     assert seen["env"]["DREAD_STAGED_OUTPUT"] == "1"
 
     dread.run_probe("example.com", output_dir="/tmp/x")
     assert seen["env"] is None
+
+
+def test_run_probe_asn_precheck_does_not_skip_cve(monkeypatch) -> None:
+    import dread
+
+    seen = {}
+    monkeypatch.setattr(dread, "_run_with_heartbeat", lambda cmd, **kw: seen.update(kw) or type("R", (), {"returncode": 0})())
+
+    dread.run_probe("example.com", skip_asn_refresh=True)
+    assert seen["env"]["DREAD_ASN_PRECHECKED"] == "1"
+    assert "DREAD_CVE_PRECHECKED" not in seen["env"]
+
+    dread.run_probe("example.com", skip_cve_refresh=True)
+    assert seen["env"]["DREAD_CVE_PRECHECKED"] == "1"
+    assert "DREAD_ASN_PRECHECKED" not in seen["env"]
 
 
 def test_target_supports_discovery_skips_local_and_ip():

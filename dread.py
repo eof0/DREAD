@@ -260,6 +260,7 @@ def run_probe(
     output_dir: str | None = None,
     verbose: bool = False,
     skip_asn_refresh: bool = False,
+    skip_cve_refresh: bool = False,
     staged_output: bool = False,
     profile: str | None = None,
     depth: int | None = None,
@@ -308,10 +309,11 @@ def run_probe(
         cmd.extend(["--output-dir", output_dir])
 
     env = None
-    if skip_asn_refresh or staged_output:
+    if skip_asn_refresh or skip_cve_refresh or staged_output:
         env = dict(os.environ)
     if skip_asn_refresh:
         env["DREAD_ASN_PRECHECKED"] = "1"
+    if skip_cve_refresh:
         env["DREAD_CVE_PRECHECKED"] = "1"
     if staged_output:
         env["DREAD_STAGED_OUTPUT"] = "1"
@@ -347,6 +349,30 @@ def run_asn_precheck(verbose: bool = False, quiet: bool = False) -> int:
         cmd,
         cwd=PROBE_PATH.parent,
         label="ASN DB pre-check",
+        quiet=quiet,
+        capture_stdout=quiet,
+        capture_stderr=quiet,
+    )
+    if quiet and r.stdout:
+        sys.stdout.write(r.stdout)
+    if quiet and r.stderr:
+        sys.stderr.write(r.stderr)
+    return r.returncode
+
+
+def run_cve_precheck(verbose: bool = False, quiet: bool = False) -> int:
+    """Run Probe's CVE startup check once before suite child scans."""
+    probe_pkg = str(PROBE_PATH.parent / "probe")
+    script = (
+        "import sys\n"
+        f"sys.path.insert(0, {probe_pkg!r})\n"
+        "from scanner.update_notifier import check_and_notify\n"
+        "check_and_notify(auto_update=True)\n"
+    )
+    r = _run_with_heartbeat(
+        [sys.executable, "-c", script],
+        cwd=PROBE_PATH.parent,
+        label="CVE DB pre-check",
         quiet=quiet,
         capture_stdout=quiet,
         capture_stderr=quiet,
@@ -501,7 +527,7 @@ def full_scan(target: str, args: argparse.Namespace) -> int:
         print("=" * 60)
         print()
 
-    # Pre-flight: ASN database freshness/update (before Scope)
+    # Pre-flight: ASN + CVE database freshness/update (before Scope)
     asn_rc = run_asn_precheck(
         verbose=bool(getattr(args, "verbose", False)),
         quiet=quiet,
@@ -510,6 +536,17 @@ def full_scan(target: str, args: argparse.Namespace) -> int:
     if asn_rc != 0 and not quiet:
         print(
             "[!] ASN DB pre-check failed; continuing scan and allowing Probe fallback.",
+            file=sys.stderr,
+        )
+
+    cve_rc = run_cve_precheck(
+        verbose=bool(getattr(args, "verbose", False)),
+        quiet=quiet,
+    )
+    cve_prechecked = cve_rc == 0
+    if cve_rc != 0 and not quiet:
+        print(
+            "[!] CVE DB pre-check failed; continuing scan and allowing Probe fallback.",
             file=sys.stderr,
         )
 
@@ -606,6 +643,7 @@ def full_scan(target: str, args: argparse.Namespace) -> int:
             output_dir=runs_root_str,
             verbose=verbose,
             skip_asn_refresh=asn_prechecked,
+            skip_cve_refresh=cve_prechecked,
             staged_output=is_temp_work_dir,
             profile=getattr(args, "profile", None),
             depth=getattr(args, "depth", None),

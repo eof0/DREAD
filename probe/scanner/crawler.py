@@ -20,18 +20,29 @@ def _local_tag(tag: str) -> str:
 
 
 def _parse_sitemap(text: str) -> tuple[list[str], bool]:
-    """Return (<loc> URLs, is_sitemap_index). Uses stdlib XML — sitemaps are not HTML."""
+    """Return page <loc> URLs and whether the doc is a sitemap index.
+
+    Only direct children of <url> / <sitemap> are used so <image:loc> and
+    other extension locs are ignored.
+    """
     try:
         root = ET.fromstring(text)
     except ET.ParseError:
         return [], False
-    locs = [
-        (elem.text or "").strip()
-        for elem in root.iter()
-        if _local_tag(elem.tag) == "loc" and (elem.text or "").strip()
-    ]
     root_name = _local_tag(root.tag)
-    return locs, root_name == "sitemapindex"
+    is_index = root_name == "sitemapindex"
+    parent_name = "sitemap" if is_index else "url"
+    locs: list[str] = []
+    for parent in root.iter():
+        if _local_tag(parent.tag) != parent_name:
+            continue
+        for child in list(parent):
+            if _local_tag(child.tag) == "loc":
+                loc = (child.text or "").strip()
+                if loc:
+                    locs.append(loc)
+                break
+    return locs, is_index
 
 
 COMMON_ROUTES = (

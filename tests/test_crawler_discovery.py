@@ -73,6 +73,30 @@ def test_seed_urls_parses_namespaced_sitemap_without_html_parser_warning():
     assert "https://example.test/namespaced" in seeds
 
 
+def test_seed_urls_ignores_image_loc_entries():
+    base = "https://example.test/"
+    pages = {
+        "https://example.test/robots.txt": FakeResponse("", status=404, content_type="text/plain"),
+        "https://example.test/sitemap.xml": FakeResponse(
+            """<?xml version="1.0" encoding="UTF-8"?>
+            <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+                    xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+              <url>
+                <loc>https://example.test/page</loc>
+                <image:image>
+                  <image:loc>https://example.test/photo.webp</image:loc>
+                </image:image>
+              </url>
+            </urlset>""",
+            content_type="application/xml",
+        ),
+    }
+    crawler = Crawler(base, max_depth=2, max_urls=50)
+    seeds = crawler.seed_urls(SeedHandler(pages))
+    assert "https://example.test/page" in seeds
+    assert "https://example.test/photo.webp" not in seeds
+
+
 def test_seed_urls_follows_sitemap_index():
     base = "https://example.test/"
     pages = {
