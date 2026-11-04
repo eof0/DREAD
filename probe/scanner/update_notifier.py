@@ -24,9 +24,10 @@ def _load_meta():
 def check_and_notify(auto_update: bool = True):
     """
     Runs at scan startup.
-    - Installs a verified full snapshot when local coverage is incomplete
-    - Uses incremental NVD synchronization when a current full DB exists
-    - Otherwise prints a loud reminder
+
+    Heavy NVD sync happens on GitHub Actions and is published as
+    ``cve-db-latest``. Scan-time refresh only pulls that snapshot — it does
+    not crawl NVD (that is reserved for explicit ``update-cve-db``).
     """
 
     if os.environ.get("DREAD_CVE_PRECHECKED", "").strip() == "1":
@@ -41,12 +42,12 @@ def check_and_notify(auto_update: bool = True):
 
     if auto_update:
         try:
-            print("[*] Preparing CVE database snapshot and incremental updates...")
-            update_with_snapshot_policy(verbose=False)
+            print("[*] Refreshing CVE database from the published GitHub snapshot...")
+            update_with_snapshot_policy(snapshot_only=True, verbose=False)
             print("=" * 70 + "\n")
             return
         except Exception as exc:
-            print(f"[!] Auto CVE update failed: {exc}")
+            print(f"[!] Auto CVE snapshot refresh failed: {exc}")
 
     meta = _load_meta()
     last_update = meta.get("last_update", "UNKNOWN")

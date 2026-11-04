@@ -19,7 +19,7 @@ def test_scan_time_update_uses_snapshot_policy(monkeypatch) -> None:
 
     notifier.check_and_notify(auto_update=True)
 
-    policy.assert_called_once_with(verbose=False)
+    policy.assert_called_once_with(snapshot_only=True, verbose=False)
 
 
 def test_scan_time_update_skips_when_cve_prechecked(monkeypatch) -> None:
