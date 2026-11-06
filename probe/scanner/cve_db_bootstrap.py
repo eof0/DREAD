@@ -270,8 +270,33 @@ def install_snapshot_atomically(
     return manifest["nvd_cursor"]
 
 
-def bootstrap_from_snapshot() -> dict[str, Any]:
-    manifest = fetch_snapshot_manifest()
+def _parse_nvd_cursor(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def local_behind_published(manifest: dict[str, Any]) -> bool:
+    """True when local store is missing, incomplete, or older than the release."""
+    from scanner import cve_db_manager as manager
+
+    if not manager.cve_db_is_complete():
+        return True
+    local = _parse_nvd_cursor(manager.read_cve_metadata().get("nvd_cursor"))
+    remote = _parse_nvd_cursor(manifest.get("nvd_cursor"))
+    if local is None or remote is None:
+        return True
+    return local < remote
+
+
+def bootstrap_from_snapshot(manifest: dict[str, Any] | None = None) -> dict[str, Any]:
+    manifest = validate_manifest(manifest) if manifest is not None else fetch_snapshot_manifest()
     destination = Path(CVE_DB_PATH)
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=destination.parent) as temp_dir:
@@ -283,44 +308,52 @@ def bootstrap_from_snapshot() -> dict[str, Any]:
     return manifest
 
 
+def ensure_published_snapshot(*, force: bool = False) -> dict[str, Any] | None:
+    """
+    Install the GitHub-published snapshot when local coverage is behind it.
+
+    Returns the manifest when a download/install ran, otherwise None.
+    Does not contact NVD.
+    """
+    manifest = fetch_snapshot_manifest()
+    if not force and not local_behind_published(manifest):
+        return None
+    return bootstrap_from_snapshot(manifest)
+
+
 def update_with_snapshot_policy(
     *,
     snapshot_only: bool = False,
     verbose: bool = False,
 ) -> int:
-    """Bootstrap incomplete stores from a snapshot, then catch up from NVD."""
+    """Prefer the GitHub-published snapshot; optionally catch up from NVD afterward."""
     from scanner import cve_db_manager as manager
 
     if snapshot_only:
-        bootstrap_from_snapshot()
+        ensure_published_snapshot()
         return 0
 
     complete = manager.cve_db_is_complete()
     cursor = manager.read_cve_metadata().get("nvd_cursor") if complete else None
-    cursor_too_old = False
-    if cursor:
-        try:
-            parsed = datetime.fromisoformat(cursor.replace("Z", "+00:00"))
-        except ValueError:
-            cursor_too_old = True
-        else:
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            cursor_too_old = datetime.now(timezone.utc) - parsed > timedelta(days=119)
+    cursor_dt = _parse_nvd_cursor(cursor)
+    cursor_too_old = cursor_dt is None or (
+        datetime.now(timezone.utc) - cursor_dt > timedelta(days=119)
+    )
 
-    if not complete or cursor_too_old:
-        try:
-            bootstrap_from_snapshot()
-        except SnapshotError as exc:
-            print(f"[!] CVE snapshot unavailable: {exc}")
-            if not complete:
-                print("[!] Falling back to a 30-day publication bootstrap; coverage is partial.")
-                return manager.update_cve_database(
-                    days=30,
-                    incremental=False,
-                    verbose=verbose,
-                )
-            print("[!] Falling back to chunked incremental NVD catch-up.")
+    try:
+        manifest = fetch_snapshot_manifest()
+        if not complete or cursor_too_old or local_behind_published(manifest):
+            bootstrap_from_snapshot(manifest)
+    except SnapshotError as exc:
+        print(f"[!] CVE snapshot unavailable: {exc}")
+        if not complete:
+            print("[!] Falling back to a 30-day publication bootstrap; coverage is partial.")
+            return manager.update_cve_database(
+                days=30,
+                incremental=False,
+                verbose=verbose,
+            )
+        print("[!] Falling back to chunked incremental NVD catch-up.")
     return manager.update_cve_database(days=30, incremental=True, verbose=verbose)
 
 
