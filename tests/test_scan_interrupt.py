@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 _PROBE = Path(__file__).resolve().parents[1] / "probe"
 if str(_PROBE) not in sys.path:
@@ -35,7 +36,10 @@ def test_crawler_stops_immediately_on_cancel():
 def test_crawler_runs_normally_without_cancel():
     crawler = Crawler("https://site.test/", max_depth=1, max_urls=10)
     urls = crawler.crawl(_Handler())        # cancel_check defaults to never
-    assert any(u["url"].startswith("https://site.test") for u in urls)
+    assert any(
+        (p := urlparse(u["url"])).scheme == "https" and p.hostname == "site.test"
+        for u in urls
+    )
 
 
 def test_keypress_canceller_is_noop_off_a_tty(monkeypatch):
