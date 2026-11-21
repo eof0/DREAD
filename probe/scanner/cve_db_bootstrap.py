@@ -236,17 +236,61 @@ def _checkpoint_existing_database(destination: Path) -> None:
         sidecar.unlink()
 
 
+def _parse_nvd_cursor(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _read_destination_metadata(destination: Path) -> dict[str, str | None] | None:
+    if not destination.exists():
+        return None
+    try:
+        with closing(sqlite3.connect(f"file:{destination}?mode=ro", uri=True)) as conn:
+            return dict(conn.execute("SELECT key, value FROM metadata"))
+    except sqlite3.Error:
+        return None
+
+
+def destination_behind_published(destination: Path, manifest: dict[str, Any]) -> bool:
+    """True when destination is missing, incomplete, or older than the release."""
+    remote = _parse_nvd_cursor(manifest.get("nvd_cursor"))
+    if remote is None:
+        return True
+    metadata = _read_destination_metadata(destination)
+    if metadata is None:
+        return True
+    if metadata.get("coverage_mode") != "full":
+        return True
+    local = _parse_nvd_cursor(metadata.get("nvd_cursor"))
+    if local is None:
+        return True
+    return local < remote
+
+
 def install_snapshot_atomically(
     snapshot_db: Path,
     manifest: dict[str, Any],
     *,
     destination: Path | None = None,
+    force: bool = False,
 ) -> str:
     destination = destination or Path(CVE_DB_PATH)
     validate_snapshot_database(snapshot_db, manifest)
     destination.parent.mkdir(parents=True, exist_ok=True)
     temp_path: Path | None = None
     with dread_update_lock():
+        # Recheck under the lock: an NVD update may have advanced the local
+        # cursor while the snapshot was downloading.
+        if not force and not destination_behind_published(destination, manifest):
+            metadata = _read_destination_metadata(destination) or {}
+            return metadata.get("nvd_cursor") or manifest["nvd_cursor"]
         _checkpoint_existing_database(destination)
         try:
             with tempfile.NamedTemporaryFile(
@@ -270,18 +314,6 @@ def install_snapshot_atomically(
     return manifest["nvd_cursor"]
 
 
-def _parse_nvd_cursor(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed
-
-
 def local_behind_published(manifest: dict[str, Any]) -> bool:
     """True when local store is missing, incomplete, or older than the release."""
     from scanner import cve_db_manager as manager
@@ -295,7 +327,11 @@ def local_behind_published(manifest: dict[str, Any]) -> bool:
     return local < remote
 
 
-def bootstrap_from_snapshot(manifest: dict[str, Any] | None = None) -> dict[str, Any]:
+def bootstrap_from_snapshot(
+    manifest: dict[str, Any] | None = None,
+    *,
+    force: bool = False,
+) -> dict[str, Any]:
     manifest = validate_manifest(manifest) if manifest is not None else fetch_snapshot_manifest()
     destination = Path(CVE_DB_PATH)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -303,7 +339,12 @@ def bootstrap_from_snapshot(manifest: dict[str, Any] | None = None) -> dict[str,
         temp_root = Path(temp_dir)
         compressed = download_snapshot(manifest, temp_root / manifest["artifact"])
         database = decompress_snapshot(compressed, temp_root / "cve_db.sqlite", manifest)
-        cursor = install_snapshot_atomically(database, manifest, destination=destination)
+        cursor = install_snapshot_atomically(
+            database,
+            manifest,
+            destination=destination,
+            force=force,
+        )
     set_state_timestamp("cve", "last_modified", cursor)
     return manifest
 
@@ -318,7 +359,7 @@ def ensure_published_snapshot(*, force: bool = False) -> dict[str, Any] | None:
     manifest = fetch_snapshot_manifest()
     if not force and not local_behind_published(manifest):
         return None
-    return bootstrap_from_snapshot(manifest)
+    return bootstrap_from_snapshot(manifest, force=force)
 
 
 def update_with_snapshot_policy(
@@ -371,7 +412,12 @@ def install_snapshot_artifact(manifest_path: Path, artifact_path: Path) -> dict[
             Path(temp_dir) / "cve_db.sqlite",
             manifest,
         )
-        cursor = install_snapshot_atomically(database, manifest, destination=destination)
+        cursor = install_snapshot_atomically(
+            database,
+            manifest,
+            destination=destination,
+            force=True,
+        )
     set_state_timestamp("cve", "last_modified", cursor)
     return manifest
 
