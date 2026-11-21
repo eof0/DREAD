@@ -180,6 +180,57 @@ def test_atomic_install_checkpoints_stale_sidecars_before_replace(tmp_path: Path
         assert conn.execute("SELECT COUNT(*) FROM cve_entries").fetchone()[0] == 1
 
 
+def test_atomic_install_skips_when_local_cursor_is_newer(tmp_path: Path) -> None:
+    from scanner.cve_db_bootstrap import install_snapshot_atomically
+
+    db, _, manifest = _artifact(tmp_path)
+    destination = tmp_path / "data" / "cve.sqlite"
+    destination.parent.mkdir()
+    newer = "2026-08-19T00:00:00.000"
+    _snapshot_db(destination, cursor=newer)
+    with sqlite3.connect(destination) as conn:
+        conn.execute(
+            "INSERT INTO cve_entries VALUES ('CVE-2020-9999', 'newer')"
+        )
+        conn.commit()
+
+    cursor = install_snapshot_atomically(db, manifest, destination=destination)
+
+    assert cursor == newer
+    with sqlite3.connect(destination) as conn:
+        ids = {row[0] for row in conn.execute("SELECT cve_id FROM cve_entries")}
+        assert ids == {"CVE-2020-0001", "CVE-2020-9999"}
+        assert (
+            conn.execute(
+                "SELECT value FROM metadata WHERE key = 'nvd_cursor'"
+            ).fetchone()[0]
+            == newer
+        )
+
+
+def test_atomic_install_force_replaces_newer_local(tmp_path: Path) -> None:
+    from scanner.cve_db_bootstrap import install_snapshot_atomically
+
+    db, _, manifest = _artifact(tmp_path)
+    destination = tmp_path / "data" / "cve.sqlite"
+    destination.parent.mkdir()
+    _snapshot_db(destination, cursor="2026-08-19T00:00:00.000")
+
+    cursor = install_snapshot_atomically(
+        db, manifest, destination=destination, force=True
+    )
+
+    assert cursor == manifest["nvd_cursor"]
+    with sqlite3.connect(destination) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM cve_entries").fetchone()[0] == 1
+        assert (
+            conn.execute(
+                "SELECT value FROM metadata WHERE key = 'nvd_cursor'"
+            ).fetchone()[0]
+            == manifest["nvd_cursor"]
+        )
+
+
 def test_install_local_artifact_used_by_ci(monkeypatch, tmp_path: Path) -> None:
     import scanner.cve_db_bootstrap as bootstrap
 
